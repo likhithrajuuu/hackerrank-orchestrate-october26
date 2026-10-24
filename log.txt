@@ -143,3 +143,45 @@ branch=main
 repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-24T20:39:57Z] Catch-up: pipeline status; no AI in the system yet
+
+User Prompt (verbatim, secrets redacted):
+where are we with the prd pipeline and everything
+[next turn] you are not using AI at all now
+
+Agent Response Summary:
+Reported that stages 1 to 3 are done (ingest, intent rules, identity, most of the evidence store), stage 4 onward not started, and that PDFs/images and an account-link rule block stage 4. Then acknowledged the user's point that no model call exists anywhere yet, and listed where AI belongs (image/PDF extraction, intent hybrid, ambiguous evidence, guarded plan drafting).
+
+Actions:
+* Read-only checks of repo state and test runs
+* None otherwise
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=main
+repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T20:39:57Z] Plan the hybrid intent classifier (instructions only)
+
+User Prompt (verbatim, secrets redacted):
+that hybrid model that we had talked about let's build that give me instructions and some of the prerequisites
+
+Agent Response Summary:
+In plan mode, measured routing on the current rules (28 of 518 requests, 23 distinct texts, would go to the model; 490 answered by rules) and wrote an approved plan with code for code/llm.py (cache, retries, usage ledger), code/intent.py (hybrid router with a safe fallback) and code/tests/check_intent.py (offline stub plus live audit). No project files were written; the user types the code unless they ask otherwise.
+
+Actions:
+* Read-only measurement of classifier routing
+* Wrote the plan file in ~/.claude/plans (plan mode)
+* Appended these entries to log.txt
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=main
+repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
