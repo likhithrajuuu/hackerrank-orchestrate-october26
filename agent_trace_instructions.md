@@ -2,7 +2,7 @@
 
 Please submit the complete agent trace for the work you did on this challenge as a **ZIP file**. A trace helps us understand the prompts, model responses, tool calls, and work performed during the session and improve our evaluation from the next time.
 
-Include every session you used for this challenge, including sessions in which you planned, coded, debugged, or reviewed the solution. If you used more than one agent harness, include traces from each one. Keep the original files and folder structure where practical; do not convert JSONL, SQLite, or other structured logs into screenshots or summaries.
+Include every session you used for this challenge, including sessions in which you planned, coded, debugged, or reviewed the solution. If you used more than one agent harness, include traces from each one. Keep the original files and folder structure where practical; do not pleasconvert JSONL, SQLite, or other structured logs into screenshots or summaries.
 
 ## Before you start
 
