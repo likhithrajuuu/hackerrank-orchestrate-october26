@@ -4,10 +4,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from agents.chat import ChatAgent
+from agents.chat_tools import make_tools
 from agents.discovery import DiscoveryAgent
 from agents.identity import IdentityAgent
 from agents.intent import IntentAgent, IntentRouter
 from classifier import classify
+from config import REPO_ROOT
 from evidence import EvidenceStore
 from graph import build_graph
 from identity import IdentityIndex
@@ -22,6 +25,13 @@ from loaders import Request, load_audit_log, load_identities, load_requests
 CODE_DIR = Path(__file__).resolve().parent
 CACHE_DIR = CODE_DIR / "cache"
 USAGE_LOG = CACHE_DIR / "usage.jsonl"
+ENV_FILE = REPO_ROOT / ".env"      # git-ignored; holds the API key and model names
+
+
+def load_env(path: Path = ENV_FILE) -> bool:
+    """Load KEY=VALUE pairs from .env into the environment. A variable already set in the shell wins over the file."""
+    from dotenv import load_dotenv
+    return load_dotenv(path, override=False)
 
 
 @dataclass(frozen=True)
@@ -46,11 +56,32 @@ def build_intent_agent(stack: LLMStack | None) -> IntentAgent:
     return IntentAgent(classify, IntentRouter(), stack.gateway if stack else None)
 
 
-def build_case_graph(stack: LLMStack | None):
+def build_case_graph(stack: LLMStack | None, store: EvidenceStore | None = None):
     """Builds the full flow. Loading the evidence store takes a few seconds, so only commands that need it call this."""
     index = IdentityIndex(load_identities(), load_audit_log())
-    store = EvidenceStore.load()
+    store = store or EvidenceStore.load()
     return build_graph(build_intent_agent(stack), IdentityAgent(index), DiscoveryAgent(store))
+
+
+def build_chat_agent(stack: LLMStack) -> ChatAgent:
+    """The conversational front end. The case graph (which loads all evidence) is only built if a tool needs it."""
+    requests = load_all_requests()
+    holder: dict = {}
+
+    def get_store():
+        if "store" not in holder:
+            holder["store"] = EvidenceStore.load()
+        return holder["store"]
+
+    def get_graph():
+        if "graph" not in holder:
+            holder["graph"] = build_case_graph(stack, get_store())
+        return holder["graph"]
+
+    tools = make_tools(requests, get_graph, get_store, build_intent_agent(stack), stack.ledger,
+                       stack.settings.prices())
+    chats = {role: build_chat_model(stack.settings, role) for role in ModelRole}
+    return ChatAgent(stack.settings, chats, stack.invokers, tools, stack.ledger)
 
 
 def load_all_requests() -> dict[str, Request]:

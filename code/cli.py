@@ -3,22 +3,27 @@
     python code/cli.py classify "<text>" [--no-llm]
     python code/cli.py case <case_id> [--no-llm]
     python code/cli.py run (--all | --samples | --cases a,b) [--workers N] [--no-llm]
+    python code/cli.py chat [--once "question"]
     python code/cli.py status
 
 Exit codes: 0 ok, 1 unexpected failure, 2 configuration or permanent API error.
 """
 import argparse
 import sys
-from collections import Counter, defaultdict
 from types import SimpleNamespace
 
-from bootstrap import (USAGE_LOG, build_case_graph, build_intent_agent, build_llm, load_all_requests)
+from langchain_core.messages import AIMessage, HumanMessage
+
+from bootstrap import (USAGE_LOG, build_case_graph, build_chat_agent, build_intent_agent, build_llm,
+                       load_all_requests, load_env)
 from classifier import classify
 from agents.intent import IntentRouter
 from llm.config import ConfigError, load_settings
+from llm.gateway import LLMUnavailable
 from llm.resilience import PermanentLLMError
 from llm.usage import UsageLedger
 from loaders import load_requests
+from reporting import render_case, render_run, render_usage, short
 
 STAGES = [
     ("Ingest CSV files", "done"),
@@ -36,48 +41,19 @@ def _stack(args):
     return None if args.no_llm else build_llm()
 
 
-def _short(text: str, width: int = 110) -> str:
-    text = " ".join(str(text).split())
-    return text if len(text) <= width else text[: width - 1] + "..."
-
-
 def cmd_classify(args) -> int:
     decision = classify(args.text)
     strong = IntentRouter().is_strong(decision)
     print(f"rules   : {decision.intent}  mixed={decision.mixed}  strong={strong}")
     for reason in decision.reasons:
-        print(f"          - {_short(reason, 90)}")
+        print(f"          - {short(reason, 90)}")
     agent = build_intent_agent(_stack(args))
     result = agent({"request": SimpleNamespace(request_text=args.text)})["intent"]
     print(f"answer  : {result.intent.value}  answered by {result.source.value}"
           f"{' (' + result.model + ')' if result.model else ''}  needs_review={result.needs_review}")
     if result.source.value != "rules":
-        print(f"reason  : {_short(' | '.join(result.reasons), 200)}")
+        print(f"reason  : {short(' | '.join(result.reasons), 200)}")
     return 0
-
-
-def _print_case(final: dict) -> None:
-    request, intent, result = final["request"], final["intent"], final["result"]
-    print(f"{request.case_id}  {request.email}  audit_at={request.audit_at:%Y-%m-%d %H:%M}Z  "
-          f"reported={request.reported_status}")
-    print(f"text    : {_short(request.request_text, 150)}")
-    print(f"intent  : {intent.intent.value} by {intent.source.value}  needs_review={intent.needs_review}")
-    subject = final.get("subject")
-    if subject:
-        print(f"identity: {subject.user_id}  {subject.status}  via {subject.via_audit_id or 'current snapshot'}")
-        print(f"          emails: {', '.join(sorted(subject.emails))}  | {len(subject.hashes)} hashes")
-    discovery = final.get("discovery")
-    if discovery:
-        by_resource = defaultdict(list)
-        for record in discovery.records:
-            by_resource[record.resource_id or "(no resource id)"].append(record)
-        print(f"evidence: {len(discovery.records)} records across {len(discovery.resource_ids)} resources; "
-              f"{len(discovery.unread_files)} files unread")
-        for resource in sorted(by_resource)[:20]:
-            records = by_resource[resource]
-            files = sorted({r.file_id for r in records})
-            print(f"          {resource:24s} {len(records):3d} records  {','.join(files[:4])}")
-    print(f"result  : {result.status}  flags={list(result.flags)}")
 
 
 def cmd_case(args) -> int:
@@ -86,7 +62,7 @@ def cmd_case(args) -> int:
         print(f"unknown case_id {args.case_id!r}", file=sys.stderr)
         return 1
     graph = build_case_graph(_stack(args))
-    _print_case(graph.invoke({"request": requests[args.case_id]}))
+    print(render_case(graph.invoke({"request": requests[args.case_id]})))
     return 0
 
 
@@ -109,15 +85,7 @@ def cmd_run(args) -> int:
     finals = graph.batch([{"request": r} for r in selected], config={"max_concurrency": args.workers})
     finals.sort(key=lambda f: f["request"].case_id)
 
-    print(f"cases    : {len(finals)}")
-    print(f"statuses : {dict(Counter(f['result'].status for f in finals))}")
-    print(f"answered : {dict(Counter(f['intent'].source.value for f in finals))}")
-    review = [f["request"].case_id for f in finals if f["result"].flags]
-    print(f"flagged  : {len(review)} {review[:15]}{' ...' if len(review) > 15 else ''}")
-    undecided = sum(f["result"].status == "UNDECIDED" for f in finals)
-    if undecided:
-        print(f"note     : {undecided} deletion cases are UNDECIDED because the state, policy and planner stages "
-              f"are not built yet; output.csv is not written.")
+    print(render_run(finals))
     if stack:
         print("breakers : " + ", ".join(f"{role.value}={inv.breaker.state}" for role, inv in stack.invokers.items()))
     return 0
@@ -134,15 +102,48 @@ def cmd_status(args) -> int:
         print("\nmodel settings: not configured in this shell (costs below use price 0)")
     summary = UsageLedger(USAGE_LOG).summary(prices)
     print("\nmodel usage (from code/cache/usage.jsonl)")
-    if not summary["per_model"]:
-        print("  no model calls recorded yet")
-    for model, t in sorted(summary["per_model"].items()):
-        print(f"  {model:24s} calls={t['calls']:4d} cache_hits={t['cache_hits']:4d} "
-              f"in={t['input_tokens']:8d} out={t['output_tokens']:7d} cost=${t['cost_usd']:.4f}")
-    o = summary["overall"]
-    print(f"  {'overall':24s} calls={o['calls']:4d} cache_hits={o['cache_hits']:4d} "
-          f"in={o['input_tokens']:8d} out={o['output_tokens']:7d} cost=${o['cost_usd']:.4f}")
+    print(render_usage(summary))
     return 0
+
+
+CHAT_HELP = """Ask in plain language, for example:
+  why is case_18 incomplete?            compare case_14 with its labeled answer
+  is "please confirm the profile is gone" a deletion request?
+  run the 32 samples                    how much have the models cost so far?
+Commands: /help  /reset (forget the conversation)  /exit"""
+
+
+def cmd_chat(args) -> int:
+    agent = build_chat_agent(build_llm())             # chat needs a model; a missing key exits with code 2
+    history: list = []
+    if args.once:
+        print(agent.ask(history, args.once))
+        return 0
+    print("Chat with the audit agent (read-only). /help for examples, /exit to leave.")
+    while True:
+        try:
+            line = input("you> ").strip()
+        except EOFError:
+            print()
+            return 0
+        if not line:
+            continue
+        if line in ("/exit", "/quit"):
+            return 0
+        if line == "/help":
+            print(CHAT_HELP)
+            continue
+        if line == "/reset":
+            history.clear()
+            print("ai> conversation cleared.")
+            continue
+        try:
+            reply = agent.ask(history, line)
+        except LLMUnavailable as exc:
+            print(f"ai> the models are unavailable right now ({exc}). The classify, case and run commands still work.")
+            continue
+        print(f"ai> {reply}")
+        history += [HumanMessage(line), AIMessage(reply)]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -168,6 +169,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-llm", action="store_true")
     p.set_defaults(func=cmd_run)
 
+    p = sub.add_parser("chat", help="talk to the audit agent in plain language (needs a model)")
+    p.add_argument("--once", metavar="QUESTION", help="ask one question and exit instead of opening a chat")
+    p.set_defaults(func=cmd_chat)
+
     p = sub.add_parser("status", help="pipeline stages and model usage")
     p.set_defaults(func=cmd_status)
     return parser
@@ -175,10 +180,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    load_env()                                     # reads the repo-root .env before any setting is looked at
     try:
         return args.func(args)
     except (ConfigError, PermanentLLMError) as exc:
-        print(f"configuration error: {exc}\nRun with --no-llm to work offline.", file=sys.stderr)
+        print(f"configuration error: {exc}", file=sys.stderr)
+        if "temperature" in str(exc).lower():
+            print("hint: this model rejects a custom temperature. Set LUNA_TEMPERATURE=none and "
+                  "SOL_TEMPERATURE=none.", file=sys.stderr)
+        print("Run with --no-llm to work offline.", file=sys.stderr)
         return 2
     except Exception as exc:                       # noqa: BLE001 - last-resort handler for a CLI
         print(f"failed: {type(exc).__name__}: {exc}", file=sys.stderr)

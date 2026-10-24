@@ -13,6 +13,12 @@ class ConfigError(RuntimeError):
     pass
 
 
+# By default no temperature is sent. The configured Luna and Sol models reject a custom temperature ("Unsupported
+# parameter: 'temperature'"), so repeatability comes from the schema-constrained output and the disk cache instead.
+# A model that does accept one can be given a value, e.g. LUNA_TEMPERATURE=0.
+DEFAULT_TEMPERATURE = "none"
+
+
 @dataclass(frozen=True)
 class ModelSettings:
     name: str
@@ -39,18 +45,20 @@ def load_settings(env: Mapping[str, str] = os.environ) -> LLMSettings:
     def one(prefix: str, default_effort: str) -> ModelSettings:
         if f"{prefix}_MODEL" not in env:
             raise ConfigError(f"{prefix}_MODEL is not set")
-        temperature = env.get(f"{prefix}_TEMPERATURE")
+        raw = env.get(f"{prefix}_TEMPERATURE", DEFAULT_TEMPERATURE).strip().lower()
         return ModelSettings(
             name=env[f"{prefix}_MODEL"],
             reasoning_effort=env.get(f"{prefix}_EFFORT", default_effort) or None,
-            temperature=float(temperature) if temperature else None,   # unset: do not send (reasoning models often reject it)
+            temperature=None if raw in ("", "none", "off") else float(raw),   # "none" = do not send a temperature
             price_in_per_m=float(env.get(f"{prefix}_PRICE_IN", 0)),
             price_out_per_m=float(env.get(f"{prefix}_PRICE_OUT", 0)),
         )
 
-    if "LLM_API_KEY" not in env:
-        raise ConfigError("LLM_API_KEY is not set")
+    api_key_env = next((name for name in ("LLM_API_KEY", "OPENAI_API_KEY") if env.get(name)), None)
+    if api_key_env is None:
+        raise ConfigError("no API key: set OPENAI_API_KEY (or LLM_API_KEY) in the shell or in the repo-root .env")
     return LLMSettings(
-        base_url=env.get("LLM_BASE_URL"),
+        base_url=env.get("LLM_BASE_URL") or None,       # optional: unset means the provider's default endpoint
         models={ModelRole.PRIMARY: one("LUNA", "high"), ModelRole.ESCALATION: one("SOL", "low")},
+        api_key_env=api_key_env,
     )

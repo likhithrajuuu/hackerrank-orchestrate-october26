@@ -1,0 +1,29 @@
+{
+  "records": [
+    {
+      "resource_id": "search_428",
+      "email": "g.silva76@gmail.com",
+      "customer_reference": "user_13",
+      "display_name": "Gabriel Silva",
+      "phone": null,
+      "status": null,
+      "observed_at": "05:58:21 UTC",
+      "notes": null
+    },
+    {
+      "resource_id": "search_1874",
+      "email": "g.silva76.jr@gmail.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "05:55:03 UTC",
+      "notes": null
+    }
+  ],
+  "usage": {
+    "model": "gpt-4o",
+    "input_tokens": 1189,
+    "output_tokens": 164
+  }
+}

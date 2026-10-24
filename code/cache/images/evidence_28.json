@@ -1,0 +1,19 @@
+{
+  "records": [
+    {
+      "resource_id": "CS-5034",
+      "email": "kagyeman8947@fastmail.com",
+      "customer_reference": "support_1034",
+      "display_name": "Kofi Agyeman",
+      "phone": null,
+      "status": "Normal priority",
+      "observed_at": null,
+      "notes": null
+    }
+  ],
+  "usage": {
+    "model": "gpt-4o",
+    "input_tokens": 1189,
+    "output_tokens": 90
+  }
+}

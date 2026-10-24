@@ -1,0 +1,49 @@
+{
+  "records": [
+    {
+      "resource_id": "ORD-20263245",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": "11 Jan 2024 08:45",
+      "notes": null
+    },
+    {
+      "resource_id": "CS-3245",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": "14 Feb 2024 12:16",
+      "notes": null
+    },
+    {
+      "resource_id": "CS-3378",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": "03 Jun 2024 09:27",
+      "notes": null
+    },
+    {
+      "resource_id": "FIN-7742",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": "22 Aug 2024 15:03",
+      "notes": null
+    }
+  ],
+  "usage": {
+    "model": "gpt-4o",
+    "input_tokens": 1189,
+    "output_tokens": 294
+  }
+}

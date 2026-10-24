@@ -70,13 +70,35 @@ Benchmark figures quoted by the author (Artificial Analysis): **intelligence ind
 - **Caching matters.** Many texts repeat (375 distinct request texts across 518 cases), so a disk cache keyed by model,
   prompt version and input removes repeat cost and keeps reruns identical.
 
+### Measured result (2026-10-25, first live run of the hybrid intent classifier)
+
+With this decision in place (Luna at high effort for the weak and ambiguous requests only), the real token use was
+far below the estimate:
+
+| Item | Assumed | Measured |
+|---|---|---|
+| Input tokens per model call | about 5,000 | **about 380** (9,865 input tokens over 26 calls) |
+| Output tokens per model call | not estimated | **about 49** (1,266 output tokens over 26 calls) |
+| Model calls for the run | one per case (518) | 26 (28 routed requests, 23 distinct texts, plus 2 manual classify checks) |
+| Rerun | pays again | **0 new calls**, 28 cache hits |
+
+- The usage ledger records the model, so these numbers come from `code/cache/usage.jsonl`, not from an estimate.
+- The averages come from the first live run. The second run of the agent made no new model calls at all, because every
+  answer was served from the cache.
+- Cost in USD is not computed yet, because the `LUNA_PRICE_IN` and `LUNA_PRICE_OUT` values are not set.
+- **Not included:** the screenshot reads made by `code/evidence/image_reader.py` (about 9.5k input and 2k output tokens
+  over 8 images, using `gpt-4o`). That reader calls the API directly, so it bypasses the ledger.
+- Why it is so low: 490 of 518 requests are answered by the regex rules and never reach a model (D-002).
+
 ### Verification needed (before relying on these numbers)
 
-- [ ] Exact API model IDs for Luna and Sol, and the provider, base URL and key variable name.
+- [x] Exact API model IDs, provider and key variable: `gpt-6-luna` and `gpt-6.1-sol` on the OpenAI endpoint, key in
+  `OPENAI_API_KEY`.
 - [ ] Current pricing from the provider's page, for **input and output** tokens (and reasoning tokens if billed separately).
 - [ ] Source and date of the Artificial Analysis figures, and which model they describe.
-- [ ] A real Luna run over the 23 uncertain texts, to compare measured tokens and cost against the estimate.
-- [ ] How each API sets reasoning effort (parameter name and allowed values).
+- [x] A real Luna run over the uncertain texts, to compare measured tokens against the estimate (see above).
+- [x] How the API sets reasoning effort: the `reasoning_effort` parameter is accepted. A custom `temperature` is
+  **rejected** (see D-007 and `code/ISSUES.md`).
 
 ### Consequences for the code (not yet done)
 
@@ -213,3 +235,30 @@ A terminal CLI is the way the system is run and inspected:
 
 `--no-llm` keeps the whole tool usable offline. `output.csv` is only written once the state, policy, planner and
 validator stages exist, and a case still `UNDECIDED` is never written as a row.
+
+---
+
+## D-007: No custom temperature for Luna and Sol
+
+- **Date:** 2026-10-25
+- **Status:** Accepted
+
+### Context
+
+The first plan sent `temperature=0` to make classification repeatable. Luna (high effort) and Sol (low effort) are
+reasoning models, and the API rejected the request:
+`Unsupported parameter: 'temperature' is not supported with this model.` (HTTP 400, `invalid_request_error`).
+
+### Decision
+
+- **Do not send a temperature by default.** `DEFAULT_TEMPERATURE` is `none` in `code/llm/config.py`.
+- It can still be set per model, for a model that accepts one: `LUNA_TEMPERATURE=0` or `SOL_TEMPERATURE=0`.
+- Repeatability now comes from other things: a schema-validated output (`IntentVerdict`), the cache keyed by model,
+  prompt version and text, and the fact that 490 of 518 requests never reach a model.
+- A 400 from the API is a permanent error (D-003). The run stops with exit code 2 and prints a hint, instead of
+  flagging hundreds of cases for what is really a configuration problem.
+
+### Consequence
+
+Because there is no temperature control, the same weak text could in principle get a different answer from the model on
+a cold cache. The cache fixes that for reruns, and the audit mode in D-002 is how disagreements would be noticed.

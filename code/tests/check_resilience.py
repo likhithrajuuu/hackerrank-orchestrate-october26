@@ -48,6 +48,7 @@ def flaky():
     if calls["n"] < 3:
         raise HttpError(429)
     return "ok"
+    
 
 
 inv = ResilientInvoker("luna", policy=RetryPolicy(max_attempts=4), sleep=sleeps.append, rng=random.Random(1))

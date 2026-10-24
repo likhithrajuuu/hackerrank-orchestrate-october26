@@ -252,3 +252,47 @@ branch=main
 repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-24T21:53:29Z] CLI how-to, temperature default, optional base URL
+
+User Prompt (verbatim, secrets redacted):
+LLM BASE URL won't be there use the llm.invoke and set an appropriate temperature so that the AI is pretty efficient and reliable. before that please let me know how can I run the cli and what can I test and then what are the expected outputs
+
+Agent Response Summary:
+Edited code/llm/config.py so the base URL is optional (provider default), the API key is read from OPENAI_API_KEY or LLM_API_KEY, and the default temperature is 0 for both models (LUNA_TEMPERATURE or SOL_TEMPERATURE set to none turns it off for reasoning models that reject it); added a temperature hint to the CLI's configuration-error message. Verified with the localhost fake server that the temperature is now sent, plus the settings parsing; all 7 check scripts still pass. Wrote a guide with the real outputs of the offline CLI commands and the expected outputs for the live ones, which are not yet verified against a real model.
+
+Actions:
+* Edited code/llm/config.py and code/cli.py
+* Re-ran all check scripts, the localhost probe in the session scratchpad, and example CLI commands offline
+* Appended this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=main
+repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T22:03:22Z] How to run; add python-dotenv and make live runs work
+
+User Prompt (verbatim, secrets redacted):
+how to run this apploication
+[next turn] why don't we have python-dotenv and then make things work
+
+Agent Response Summary:
+Explained how to run the CLI. Then added python-dotenv to code/requirements.txt and installed it, added load_env() to bootstrap.py and called it at the start of cli.main so the repo-root .env (key, model names, base URL) is loaded without exporting anything; key values were never printed. The first live call failed with the model rejecting a custom temperature, so the default temperature is now not sent (config DEFAULT_TEMPERATURE=none) while an explicit value can still be set. After that, a live classify and a live run over all 518 cases gave 508 deletion, 10 not applicable, 490 answered by rules, 28 by the primary model, 0 flagged; a rerun made no new calls. Found that the earlier image reader now makes live vision calls (default gpt-4o, own client, not Sol, not in the usage ledger) during evidence loading: 8 of 11 screenshots were extracted and cached, 3 fail and are retried on every run. This was disclosed to the user, not yet changed.
+
+Actions:
+* Edited code/requirements.txt, code/bootstrap.py, code/cli.py, code/llm/config.py
+* Installed python-dotenv in .venv
+* Ran live CLI commands (classify, run --all twice, status) and all 7 check scripts
+* Appended this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=main
+repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none

@@ -1,0 +1,49 @@
+{
+  "records": [
+    {
+      "resource_id": "data_flow_1121",
+      "email": "jain.aditi@gmail.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "07:59:42",
+      "notes": null
+    },
+    {
+      "resource_id": "data_flow_9846",
+      "email": "lucia-torres@gmail.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "07:59:36",
+      "notes": null
+    },
+    {
+      "resource_id": "Order notifications",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "07:59:28",
+      "notes": null
+    },
+    {
+      "resource_id": "Delivery tracking",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "07:59:13",
+      "notes": null
+    }
+  ],
+  "usage": {
+    "model": "gpt-4o",
+    "input_tokens": 1189,
+    "output_tokens": 284
+  }
+}

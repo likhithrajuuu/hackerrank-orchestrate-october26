@@ -1,0 +1,49 @@
+{
+  "records": [
+    {
+      "resource_id": "backup_9291",
+      "email": "bluepeacko@outlook.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": null
+    },
+    {
+      "resource_id": "backup_9288",
+      "email": "miller.logistics@company.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": null
+    },
+    {
+      "resource_id": "backup_9287",
+      "email": "areed1433@gmail.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": null
+    },
+    {
+      "resource_id": "backup_9286",
+      "email": "summit-retail@company.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": null
+    }
+  ],
+  "usage": {
+    "model": "gpt-4o",
+    "input_tokens": 1189,
+    "output_tokens": 281
+  }
+}
