@@ -4,11 +4,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from agents.audit import AuditAgent
 from agents.chat import ChatAgent
 from agents.chat_tools import make_tools
 from agents.discovery import DiscoveryAgent
 from agents.identity import IdentityAgent
 from agents.intent import IntentAgent, IntentRouter
+from agents.policy import PolicyAgent
+from agents.state import StateAgent
+from audit import Auditor
 from classifier import classify
 from config import REPO_ROOT
 from evidence import EvidenceStore
@@ -20,12 +24,15 @@ from llm.factory import build_chat_model
 from llm.gateway import LLMGateway
 from llm.resilience import ResilientInvoker
 from llm.usage import UsageLedger
-from loaders import Request, load_audit_log, load_identities, load_requests
+from loaders import Request, load_activity, load_audit_log, load_identities, load_requests, load_rules
+from policy import PolicyEngine
+from state import StateReconstructor
 
 CODE_DIR = Path(__file__).resolve().parent
 CACHE_DIR = CODE_DIR / "cache"
 USAGE_LOG = CACHE_DIR / "usage.jsonl"
 ENV_FILE = REPO_ROOT / ".env"      # git-ignored; holds the API key and model names
+MAX_CONCURRENT_CALLS = 4           # most simultaneous calls to one model (D-011); matches the CLI's default --workers
 
 
 def load_env(path: Path = ENV_FILE) -> bool:
@@ -46,7 +53,7 @@ def build_llm(env: Mapping[str, str] = os.environ) -> LLMStack:
     """Raises ConfigError when a required environment variable is missing."""
     settings = load_settings(env)
     chats = {role: build_chat_model(settings, role) for role in ModelRole}
-    invokers = {role: ResilientInvoker(role.value) for role in ModelRole}
+    invokers = {role: ResilientInvoker(role.value, max_concurrent=MAX_CONCURRENT_CALLS) for role in ModelRole}
     ledger = UsageLedger(USAGE_LOG)
     gateway = LLMGateway(settings, chats, invokers, ResponseCache(CACHE_DIR / "llm"), ledger)
     return LLMStack(gateway, ledger, settings, invokers)
@@ -60,7 +67,12 @@ def build_case_graph(stack: LLMStack | None, store: EvidenceStore | None = None)
     """Builds the full flow. Loading the evidence store takes a few seconds, so only commands that need it call this."""
     index = IdentityIndex(load_identities(), load_audit_log())
     store = store or EvidenceStore.load()
-    return build_graph(build_intent_agent(stack), IdentityAgent(index), DiscoveryAgent(store))
+    claims: dict[str, list] = {}
+    for row in load_activity():
+        claims.setdefault(row.resource_id, []).append(row)
+    state_agent = StateAgent(StateReconstructor(store, claims))
+    return build_graph(build_intent_agent(stack), IdentityAgent(index), DiscoveryAgent(store), state_agent,
+                       PolicyAgent(PolicyEngine(load_rules())), AuditAgent(Auditor()))
 
 
 def build_chat_agent(stack: LLMStack) -> ChatAgent:

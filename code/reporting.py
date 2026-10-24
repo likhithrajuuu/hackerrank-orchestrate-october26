@@ -35,6 +35,23 @@ def render_case(final: dict) -> str:
             records = by_resource[resource]
             files = sorted({r.file_id for r in records})
             lines.append(f"          {resource:24s} {len(records):3d} records  {','.join(files[:4])}")
+    states = final.get("states")
+    if states:
+        lines.append(f"state   : {len(states.states)} resources at audit_at")
+        for rs in states.states[:25]:
+            cite = rs.evidence_id or ("not citable" if rs.observations else "no evidence")
+            claim = f"  claims: {', '.join(f'{c.event_type}={c.result}' for c in rs.claims[:3])}" if rs.claims else ""
+            lines.append(f"          {rs.resource_id:22s} {rs.category:20s} {rs.state.value:15s} [{cite}]"
+                         f"{' CONFLICT' if rs.conflict else ''}{claim}")
+    audit = final.get("audit")
+    if audit:
+        lines.append(f"audit   : {audit.status}  ({'; '.join(audit.reasons)})")
+        for a in audit.assessments:
+            treat = a.treatment.value if a.treatment else "-"
+            lines.append(f"          {a.resource_id:22s} {treat:9s} {a.state.value:15s} -> {a.verdict.value:10s}"
+                         f"{'  finding ' + a.finding_op if a.finding_op else ''}"
+                         f"{'  fix ' + a.remediation_op if a.remediation_op else ''}"
+                         f"{'  REVIEW' if a.needs_review else ''}")
     lines.append(f"result  : {result.status}  flags={list(result.flags)}")
     return "\n".join(lines)
 
@@ -49,8 +66,8 @@ def render_run(finals: list[dict]) -> str:
         f"flagged  : {len(review)} {review[:15]}{' ...' if len(review) > 15 else ''}",
     ]
     if undecided:
-        lines.append(f"note     : {undecided} deletion cases are UNDECIDED because the state, policy and planner "
-                     f"stages are not built yet; output.csv is not written.")
+        lines.append(f"note     : {undecided} cases are UNDECIDED (no assessable evidence); output.csv is not written "
+                     f"until the step builder and validator exist.")
     return "\n".join(lines)
 
 
@@ -60,10 +77,12 @@ def render_usage(summary: dict) -> str:
         lines.append("  no model calls recorded yet")
     for model, t in sorted(summary["per_model"].items()):
         lines.append(f"  {model:24s} calls={t['calls']:4d} cache_hits={t['cache_hits']:4d} "
-                     f"in={t['input_tokens']:8d} out={t['output_tokens']:7d} cost=${t['cost_usd']:.4f}")
+                     f"in={t['input_tokens']:8d} (provider-cached {t['cached_input_tokens']:6d}) "
+                     f"out={t['output_tokens']:7d} cost=${t['cost_usd']:.4f}")
     o = summary["overall"]
     lines.append(f"  {'overall':24s} calls={o['calls']:4d} cache_hits={o['cache_hits']:4d} "
-                 f"in={o['input_tokens']:8d} out={o['output_tokens']:7d} cost=${o['cost_usd']:.4f}")
+                 f"in={o['input_tokens']:8d} (provider-cached {o['cached_input_tokens']:6d}) "
+                 f"out={o['output_tokens']:7d} cost=${o['cost_usd']:.4f}")
     return "\n".join(lines)
 
 

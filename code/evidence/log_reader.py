@@ -36,6 +36,10 @@ def read_log(path: Path):
             em = re.search(r"\]\s*([a-z_]+):", rest)
             if em:
                 fields["event"] = em.group(1)
+        if "event" not in fields:  # | LEVEL | service | trace | event_name | k="v" ...
+            pm = re.search(r"\|\s*([a-z_]+)\s*\|\s*[A-Za-z_]+=", rest)
+            if pm:
+                fields["event"] = pm.group(1)
         trace = fields.get("trace_id") or fields.get("requestId") or fields.get("trace")
         if not trace:
             tm = TRACE_RE.search(rest)

@@ -1,6 +1,6 @@
 from typing import TypedDict
 
-from contracts import CaseResult, DiscoveryResult, IntentDecision
+from contracts import AuditResult, CaseResult, DiscoveryResult, IntentDecision, Requirement, StateResult
 from identity import Subject
 from loaders import Request
 
@@ -11,5 +11,8 @@ class CaseState(TypedDict, total=False):
     intent: IntentDecision
     subject: Subject
     discovery: DiscoveryResult
+    states: StateResult
+    requirements: tuple[Requirement, ...]
+    audit: AuditResult
     flags: list[str]
     result: CaseResult

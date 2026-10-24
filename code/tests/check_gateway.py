@@ -1,6 +1,8 @@
 import random
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -30,11 +32,15 @@ class Raw:
     usage_metadata = {"input_tokens": 100, "output_tokens": 10}
 
 
+class RawCached:
+    usage_metadata = {"input_tokens": 2000, "output_tokens": 10, "input_token_details": {"cache_read": 1536}}
+
+
 class StubChat:
     """Stands in for a LangChain chat model. Each behaviour is an Exception, None (unparseable) or a dict."""
 
-    def __init__(self, *behaviours):
-        self.behaviours, self.calls, self.schema = list(behaviours), 0, None
+    def __init__(self, *behaviours, raw=None, delay=0.0):
+        self.behaviours, self.calls, self.schema, self.raw, self.delay = list(behaviours), 0, None, raw, delay
 
     def with_structured_output(self, schema, include_raw=True, method=None):
         self.schema = schema
@@ -42,10 +48,12 @@ class StubChat:
 
     def invoke(self, messages):
         self.calls += 1
+        if self.delay:
+            time.sleep(self.delay)
         item = self.behaviours.pop(0) if len(self.behaviours) > 1 else self.behaviours[0]
         if isinstance(item, Exception):
             raise item
-        return {"raw": Raw(), "parsed": None if item is None else self.schema(**item)}
+        return {"raw": (self.raw or Raw)(), "parsed": None if item is None else self.schema(**item)}
 
 
 def check(label, ok):
@@ -134,5 +142,25 @@ with tempfile.TemporaryDirectory() as tmp:
         check("401 propagates", False)
     except PermanentLLMError:
         check("401 propagates and is not swallowed by the fallback", True)
+
+    # 9) Provider-side prompt caching is recorded, separately from our own response cache.
+    luna = StubChat(GOOD, raw=RawCached)
+    gw, ledger = build(luna, StubChat(GOOD), root / "i")
+    gw.structured(Probe, "sys", "text", "v1")
+    row = ledger.summary(SETTINGS.prices())["per_model"]["luna-test"]
+    check("the ledger records prompt tokens the provider served from its own cache",
+          row["cached_input_tokens"] == 1536 and row["input_tokens"] == 2000)
+
+    # 10) Single-flight: identical requests arriving together are paid for once.
+    luna = StubChat(GOOD, delay=0.05)
+    gw, ledger = build(luna, StubChat(GOOD), root / "j")
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(gw.structured(Probe, "sys", "same text", "v1")))
+               for _ in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    row = ledger.summary(SETTINGS.prices())["per_model"]["luna-test"]
+    check("8 identical simultaneous requests make exactly one model call", luna.calls == 1 and row["calls"] == 1)
+    check("the other 7 are served from the cache and agree", row["cache_hits"] == 7 and len({r.value.answer for r in results}) == 1)
 
 print("gateway checks passed")

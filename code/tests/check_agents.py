@@ -4,17 +4,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # make code/ importable
 
+from agents.audit import AuditAgent
 from agents.discovery import DiscoveryAgent
 from agents.identity import IdentityAgent
 from agents.intent import IntentAgent, IntentRouter
+from agents.policy import PolicyAgent
+from agents.state import StateAgent
+from audit import Auditor
 from classifier import classify
-from contracts import Intent, IntentVerdict, Source
+from contracts import Intent, IntentVerdict, Source, State, Verdict
 from evidence import EvidenceStore
 from graph import build_graph
 from identity import IdentityIndex
 from llm.config import ModelRole
 from llm.gateway import LLMResult, LLMUnavailable
-from loaders import load_audit_log, load_identities, load_requests
+from loaders import load_activity, load_audit_log, load_identities, load_requests, load_rules
+from policy import PolicyEngine
+from state import StateReconstructor
 
 
 def check(label, ok):
@@ -112,6 +118,31 @@ weak = next(r for r in routed if classify(r.request_text).intent == "DELETION")
 final = graph.invoke({"request": weak})
 check("a weak-intent deletion request is routed to the model and continues", final["intent"].source == Source.PRIMARY
       and final["result"].status == "UNDECIDED")
+
+# 6b) Stage 4 inside the graph.
+claims = {}
+for row in load_activity():
+    claims.setdefault(row.resource_id, []).append(row)
+graph_with_state = build_graph(agent_for(StubGateway()), IdentityAgent(index), DiscoveryAgent(store),
+                               StateAgent(StateReconstructor(store, claims)))
+final = graph_with_state.invoke({"request": sample10})
+support = final["states"].get("support_002")
+check("stage 4 runs in the graph: case_10's support record is PRESENT, cited, with its DELETE claim kept",
+      support.state == State.PRESENT and support.citable and any(c.event_type == "DELETE_RECORD" for c in support.claims))
+final = graph_with_state.invoke({"request": non_deletion})
+check("a non-deletion request never reaches the state agent", "states" not in final)
+
+# 6c) The whole flow, stages 4 to 6, decides a status.
+full = build_graph(agent_for(StubGateway()), IdentityAgent(index), DiscoveryAgent(store),
+                   StateAgent(StateReconstructor(store, claims)), PolicyAgent(PolicyEngine(load_rules())), AuditAgent(Auditor()))
+samples_by_id = {r.case_id: r for r in load_requests("sample_deletion_requests.csv")}
+final = full.invoke({"request": samples_by_id["case_14"]})
+check("case_14 flows through to INCOMPLETE because of the restorable backup",
+      final["result"].status == "INCOMPLETE" and [a.resource_id for a in final["audit"].of(Verdict.VIOLATION)] == ["backup_3870"])
+final = full.invoke({"request": samples_by_id["case_26"]})
+check("case_26 flows through to COMPLETE", final["result"].status == "COMPLETE")
+final = full.invoke({"request": non_deletion})
+check("a non-deletion request still stops at NOT_APPLICABLE", final["result"].status == "NOT_APPLICABLE" and "audit" not in final)
 
 # 7) Batch execution keeps order and results line up with their requests.
 batch = requests[:3] + [non_deletion] + routed[:2]

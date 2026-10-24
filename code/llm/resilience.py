@@ -72,17 +72,20 @@ class ResilientInvoker:
     """Runs a callable with retries and a breaker. Does not know what the callable does (single responsibility)."""
 
     def __init__(self, name: str, policy: RetryPolicy = RetryPolicy(), breaker: CircuitBreaker | None = None,
-                 sleep=time.sleep, rng: random.Random | None = None):
+                 sleep=time.sleep, rng: random.Random | None = None, max_concurrent: int = 4):
         self.name, self.policy = name, policy
         self.breaker = breaker or CircuitBreaker()
         self._sleep, self._rng = sleep, rng or random.Random()
+        # Bounded concurrency: at most this many calls to this model are in flight, however many workers ask.
+        self._slots = threading.BoundedSemaphore(max_concurrent)
 
     def call(self, fn):
         if not self.breaker.allow():
             raise CircuitOpenError(self.name)
         for attempt in range(1, self.policy.max_attempts + 1):
             try:
-                result = fn()
+                with self._slots:                      # backoff sleeps happen outside the slot
+                    result = fn()
             except Exception as exc:
                 if not is_retryable(exc):
                     raise PermanentLLMError(f"{self.name}: {type(exc).__name__}: {exc}") from exc

@@ -111,4 +111,29 @@ except TransientLLMError:
     pass
 check("failed half-open trial reopens the breaker", inv.breaker.state == "OPEN")
 
+# 7) Bounded concurrency: never more than max_concurrent calls in flight, yet parallelism is really used.
+import threading
+import time
+
+inflight = {"now": 0, "max": 0}
+guard = threading.Lock()
+
+
+def slow_call():
+    with guard:
+        inflight["now"] += 1
+        inflight["max"] = max(inflight["max"], inflight["now"])
+    time.sleep(0.03)
+    with guard:
+        inflight["now"] -= 1
+    return "ok"
+
+
+bounded = ResilientInvoker("luna", max_concurrent=3, sleep=lambda s: None)
+threads = [threading.Thread(target=lambda: bounded.call(slow_call)) for _ in range(12)]
+[t.start() for t in threads]
+[t.join() for t in threads]
+check("12 simultaneous requests never exceed 3 calls in flight", inflight["max"] <= 3)
+check("parallelism is actually used (more than one call at a time)", inflight["max"] >= 2)
+
 print("resilience checks passed")

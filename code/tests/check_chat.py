@@ -140,6 +140,32 @@ with tempfile.TemporaryDirectory() as tmp:
     except PermanentLLMError:
         check("a permanent error is not swallowed by the fallback", True)
 
+# 5b) Hallucination guard: invented ids are flagged, ids a tool returned are not.
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    luna = ScriptedModel(tool_call("echo_tool", {"x": "account_123"}), final("Resource account_123 is fine."))
+    agent, _ = agent_for(luna, ScriptedModel(final("sol")), root / "h1")
+    reply = agent.ask([], "check it")
+    check("an id that a tool returned is not flagged", "[unverified]" not in reply)
+
+    agent, _ = agent_for(ScriptedModel(final("The leftover is search_9999 and evidence_77.")), ScriptedModel(final("sol")), root / "h2")
+    reply = agent.ask([], "what is left?")
+    check("invented ids are flagged by name", "[unverified]" in reply and "search_9999" in reply and "evidence_77" in reply)
+
+    agent, _ = agent_for(ScriptedModel(final("You asked about case_14, which I did not look up.")), ScriptedModel(final("sol")), root / "h3")
+    check("an id the user wrote is not flagged", "[unverified]" not in agent.ask([], "tell me about case_14"))
+
+    luna = ScriptedModel(tool_call("echo_tool", {"x": "backup_55"}), final("First answer about backup_55."),
+                         final("Still backup_55, as before."))
+    agent, _ = agent_for(luna, ScriptedModel(final("sol")), root / "h4")
+    first = agent.ask([], "look at it")
+    second = agent.ask([HumanMessage("look at it"), AIMessage(first)], "and again?")
+    check("an id verified earlier in the session stays verified", "[unverified]" not in second)
+
+    agent, _ = agent_for(ScriptedModel(final("The service names account_service and search_service are not ids.")),
+                         ScriptedModel(final("sol")), root / "h5")
+    check("system names such as account_service are not mistaken for ids", "[unverified]" not in agent.ask([], "q"))
+
 # 6) The real tools, with a stubbed case graph so no evidence is loaded and no model is called.
 samples = {r.case_id: r for r in load_requests("sample_deletion_requests.csv")}
 

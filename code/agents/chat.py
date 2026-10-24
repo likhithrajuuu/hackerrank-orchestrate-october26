@@ -1,4 +1,5 @@
 """Conversational front end. The model reads the user's message, calls read-only tools for facts, and explains."""
+import re
 from typing import Mapping, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -36,6 +37,15 @@ Be concise. When explaining a discrepancy, name the resource ids and what the ev
 confirmed by evidence from what is only a claim in the activity log."""
 
 
+# Identifiers the assistant must not invent: cases, evidence, activity and audit rows, users and every resource kind.
+ID_RE = re.compile(r"\b(?:case|evidence|activity|audit|user|account|search|analytics|support|export|backup|data_flow|"
+                   r"audit_record|tombstone|legal_hold|marketing|cache|email_delivery|object)_\d+\b")
+
+
+def _ids(text: str) -> set[str]:
+    return set(ID_RE.findall(text))
+
+
 def _text(message: AIMessage) -> str:
     content = message.content
     if isinstance(content, str):
@@ -49,6 +59,7 @@ class ChatAgent:
                  max_steps: int = 6):
         self._settings, self._invokers, self._ledger, self._max_steps = settings, invokers, ledger, max_steps
         self._tools = {tool.name: tool for tool in tools}
+        self._verified: set[str] = set()           # ids a tool has returned during this session
         self._bound = {role: chat.bind_tools(list(tools)) for role, chat in chats.items()}
 
     def _invoke(self, messages: list[BaseMessage]) -> AIMessage:
@@ -62,7 +73,8 @@ class ChatAgent:
                 continue
             usage = getattr(reply, "usage_metadata", None) or {}
             self._ledger.record(role.value, self._settings.models[role].name, VERSION,
-                                usage.get("input_tokens", 0), usage.get("output_tokens", 0), cached=False)
+                                usage.get("input_tokens", 0), usage.get("output_tokens", 0), cached=False,
+                                cached_input_tokens=(usage.get("input_token_details") or {}).get("cache_read", 0))
             return reply
         raise LLMUnavailable(errors)
 
@@ -75,13 +87,26 @@ class ChatAgent:
         except Exception as exc:                       # a failing tool must not end the conversation
             return f"tool error: {type(exc).__name__}: {exc}"
 
+    def _guard(self, reply: str, user_text: str, history: Sequence[BaseMessage]) -> str:
+        """Hallucination guard: any case, resource or evidence id in the answer that no tool returned in this session,
+        and that the user did not write, is flagged. The model can still be wrong, but it cannot silently invent ids."""
+        said_by_user = {i for m in history if isinstance(m, HumanMessage) and isinstance(m.content, str)
+                        for i in _ids(m.content)} | _ids(user_text)
+        unverified = sorted(_ids(reply) - self._verified - said_by_user)
+        if not unverified:
+            return reply
+        return (f"{reply}\n\n[unverified] These ids appear in the answer but in no tool result: "
+                f"{', '.join(unverified)}. Treat them as unconfirmed and check with the case or resource_evidence tools.")
+
     def ask(self, history: Sequence[BaseMessage], user_text: str) -> str:
         messages: list[BaseMessage] = [SystemMessage(SYSTEM), *history[-MAX_HISTORY:], HumanMessage(user_text)]
         for _ in range(self._max_steps):
             reply = self._invoke(messages)
             messages.append(reply)
             if not reply.tool_calls:
-                return _text(reply).strip()
+                return self._guard(_text(reply).strip(), user_text, history)
             for call in reply.tool_calls:
-                messages.append(ToolMessage(content=self._run_tool(call), tool_call_id=call["id"]))
+                output = self._run_tool(call)
+                self._verified |= _ids(output)
+                messages.append(ToolMessage(content=output, tool_call_id=call["id"]))
         return f"I stopped after {self._max_steps} tool steps without a final answer. Try a narrower question."
