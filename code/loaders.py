@@ -82,7 +82,7 @@ def load_requests(name: str = "deletion_requests.csv") -> list[Request]:
     assert len(ids) == len(set(ids)), "duplicate case_id"
     return rows
 
-def load_indentities() -> list[Identity]:
+def load_identities() -> list[Identity]:
     return [
         Identity(
             r["user_id"],
