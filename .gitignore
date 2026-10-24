@@ -1,2 +1,35 @@
-.venv/
+# Secrets: API keys must never be committed. .env.example lists the variable names with no values.
 .env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Temporary files (the response cache writes *.tmp while saving an answer)
+*.tmp
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Submission archive: it is built from this repo, not stored in it
+code.zip
+
+# Model response cache, image extractions and the usage ledger (code/cache/).
+# Left tracked on purpose for now so a reviewer without an API key can reproduce the results.
+# To stop tracking it, uncomment the next line:
+# code/cache/
