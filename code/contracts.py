@@ -35,6 +35,14 @@ class IntentVerdict(BaseModel):
     reason: str = Field(max_length=300)
 
 
+class StateVerdict(BaseModel):
+    """What a model says about one resource record whose state the rules could not read (see agents/interpret.py)."""
+    state: Literal["ACTIVE", "DISABLED", "RESTORABLE", "RESTORE_BLOCKED", "CANNOT_TELL"]
+    confidence: Literal["high", "medium", "low"]
+    quote: str = Field(max_length=300)       # the exact words of the record that decided it; checked against the record
+    reason: str = Field(max_length=300)
+
+
 # ---- internal (frozen dataclasses) ----
 @dataclass(frozen=True)
 class IntentDecision:
@@ -200,3 +208,29 @@ class AuditResult:
 
     def of(self, verdict: Verdict) -> tuple[Assessment, ...]:
         return tuple(a for a in self.assessments if a.verdict == verdict)
+
+
+# ---- stage 7: plan, validation ----
+@dataclass(frozen=True)
+class Plan:
+    status: str                          # COMPLETE | INCOMPLETE (the planner never returns UNDECIDED)
+    steps: tuple[Step, ...]
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Problem:
+    severity: str                        # "error" blocks the row from being written; "warning" is reported only
+    message: str
+
+
+@dataclass(frozen=True)
+class Interpretation:
+    """A state the rules could not read, settled by two models that agreed and quoted the record."""
+    resource_id: str
+    evidence_id: str
+    before: str
+    after: str
+    quote: str
+    models: tuple[str, ...]
+    trace: str = ""                  # the Thought / Action / Observation of each model, for audit

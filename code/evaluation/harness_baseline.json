@@ -1,0 +1,14 @@
+{
+  "full_run_errors": 0,
+  "order_ok": 32,
+  "sample_errors": 0,
+  "samples": 32,
+  "secret_hits": 0,
+  "status_correct": 31,
+  "steps_found": 157,
+  "steps_labeled": 193,
+  "steps_right": 157,
+  "steps_wrong": 0,
+  "submission_mismatches": 0,
+  "suites_passed": 14
+}

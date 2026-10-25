@@ -24,7 +24,7 @@ from evidence import EvidenceStore
 from identity import IdentityIndex
 from loaders import load_activity, load_audit_log, load_identities, load_requests, load_rules
 from policy import PolicyEngine
-from state import StateReconstructor
+from state import StateReconstructor, is_modeled
 
 
 def main() -> int:
@@ -43,7 +43,7 @@ def main() -> int:
     for request in load_requests("sample_deletion_requests.csv"):
         subject = index.resolve(request.email, request.audit_at)
         tokens = set(subject.emails) | set(subject.hashes) | set(subject.phones) | {subject.user_id}
-        discovered = {r.resource_id for r in store.for_tokens(tokens, request.audit_at) if r.resource_id}
+        discovered = {r.resource_id for r in store.for_tokens(tokens, request.audit_at) if r.resource_id and is_modeled(r.resource_id)}
         states = reconstructor.reconstruct(discovered, request.audit_at)
         requirements = [engine.requirement(s, request.audit_at) for s in states]
         audit = auditor.audit(states, requirements, request.requested_at)

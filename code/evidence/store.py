@@ -5,7 +5,7 @@ from pathlib import Path
 from config import DATASET, parse_ts
 from loaders import load_manifest
 
-from .image_reader import read_image
+from .image_reader import cached_vision
 from .json_reader import read_json
 from .log_reader import read_log
 from .model import EvidenceRecord, tokens_of
@@ -22,7 +22,8 @@ def _ts(value) -> datetime | None:
 
 
 class EvidenceStore:
-    def __init__(self):
+    def __init__(self, vision=cached_vision):
+        self._vision = vision                      # (path, file_id) -> records; the default never calls a model
         self.records: list[EvidenceRecord] = []
         self.by_resource = defaultdict(list)
         self.by_token = defaultdict(list)
@@ -30,8 +31,8 @@ class EvidenceStore:
         self.unread: dict[str, str] = {}  # file_id -> reason
 
     @classmethod
-    def load(cls) -> "EvidenceStore":
-        store = cls()
+    def load(cls, vision=cached_vision) -> "EvidenceStore":
+        store = cls(vision)
         for ef in sorted(load_manifest(), key=lambda e: (e.captured_at, e.file_id)):
             try:
                 if store._read_file(ef) == 0:
@@ -80,8 +81,7 @@ class EvidenceStore:
             for page_no, text in read_pdf(path):
                 emit("pdf", None, None, None, f"page_{page_no}", {"text": text})
         elif suffix == ".png":
-            records, _usage = read_image(path, ef.file_id)
-            for rec in records:
+            for rec in self._vision(path, ef.file_id):
                 emit("image", rec.get("observed_at"), rec.get("resource_id"), None, None,
                      {k: v for k, v in rec.items() if v is not None})
         return count

@@ -1,0 +1,56 @@
+{
+  "file_id": "evidence_09",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": "search_428",
+      "email": "g.silva76@gmail.com",
+      "customer_reference": "user_13",
+      "display_name": "Gabriel Silva",
+      "phone": null,
+      "status": null,
+      "observed_at": "2026-09-01T05:58:21Z",
+      "notes": "_index: customer_directory_v3; Score: 9.84; Last indexed: 05:58:21 UTC"
+    },
+    {
+      "resource_id": "search_1874",
+      "email": "g.silva76.jr@gmail.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "05:55:03 UTC",
+      "notes": "Score: 4.12"
+    },
+    {
+      "resource_id": null,
+      "email": "g.silva76@gmail.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "06:00:14",
+      "notes": "email:g.silva76@gmail.com \u00b7 2 hits"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_9842",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "05:42:03",
+      "notes": "customer_reference:user_9842 \u00b7 1 hit"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "Aditi Jain",
+      "phone": null,
+      "status": null,
+      "observed_at": "05:31:18",
+      "notes": "display_name:\"Aditi Jain\" \u00b7 1 hit"
+    }
+  ]
+}

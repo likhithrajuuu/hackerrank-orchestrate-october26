@@ -1,0 +1,1 @@
+{"thought": "The record only gives a bare ACTIVE status and does not say whether restore is allowed or blocked. That is insufficient to determine restorability.", "action": "final", "input": "{\"state\":\"CANNOT_TELL\",\"confidence\":\"high\",\"quote\":\"\",\"reason\":\"The record's bare ACTIVE status does not indicate whether restoring the backup is allowed.\"}"}

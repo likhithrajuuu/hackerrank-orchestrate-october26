@@ -112,6 +112,20 @@ check("a late-exported file sets the state but is never cited; the earlier citab
 only_late = reduce_resource("audit_record_1", [late], (), AUDIT)
 check("with only a late-exported file nothing may be cited", only_late.evidence_id == "" and not only_late.citable)
 
+existing = obs(record("support_1", "log", observed=T0, captured=T0 - timedelta(days=1), file_id="evidence_old",
+                      event="support_ticket_read_completed", requester_email="a@b.com"))
+now_present = obs(record("support_1", "log", observed=T0 + timedelta(hours=1), captured=AUDIT + timedelta(days=2),
+                         file_id="evidence_late", event="attachment_pii_scan", matched_value="a@b.com"))
+rs = reduce_resource("support_1", [existing, now_present], (), AUDIT)
+check("a PRESENT record whose latest file is not citable cites an earlier citable observation of an existing record",
+      rs.state == State.PRESENT and rs.evidence_id == "evidence_old" and rs.citable)
+rs = reduce_resource("support_1", [now_present], (), AUDIT)
+check("with nothing citable at all, nothing is cited", rs.evidence_id == "" and not rs.citable)
+deleted_then = obs(record("support_1", "log", observed=T0, captured=T0 - timedelta(days=1), file_id="evidence_present", event="profile_lookup_completed", rows="1"))
+gone = obs(record("support_1", "log", observed=T0 + timedelta(hours=1), captured=AUDIT + timedelta(days=2), file_id="evidence_late2", event="profile_lookup_completed", rows="0"))
+check("an ABSENT state is never proven by an earlier observation that the record existed",
+      reduce_resource("support_1", [deleted_then, gone], (), AUDIT).evidence_id == "")
+
 boundary = obs(record("account_1", "text", captured=AUDIT, file_id="evidence_boundary", record_type="USER_PROFILE", result="NOT_FOUND", system="s"))
 check("a file captured exactly at audit_at is citable", reduce_resource("account_1", [boundary], (), AUDIT).evidence_id == "evidence_boundary")
 

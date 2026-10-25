@@ -1,0 +1,1 @@
+{"thought": "The case explanation identifies data_flow_1121 as ACTIVE and the sole violation, but its evidence summary does not show the underlying evidence details. I’ll inspect that resource to distinguish confirmed state from activity-log claims.", "action": "resource_evidence", "input": "{\"case_id\":\"case_39\",\"resource_id\":\"data_flow_1121\"}"}

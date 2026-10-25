@@ -1,0 +1,166 @@
+{
+  "file_id": "evidence_42",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": "Retained reference",
+      "observed_at": "10 Mar 2026 07:18 UTC",
+      "notes": "Customer key \u00b7 Account Platform \u00b7 eu-west; Created: 11 Jan 2024 08:42 UTC"
+    },
+    {
+      "resource_id": "ORD-20263245",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": null,
+      "notes": "Orders; Linked to customer; Created (UTC): 11 Jan 2024 08:45"
+    },
+    {
+      "resource_id": "CS-3245",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": null,
+      "notes": "Support; Linked to customer; Created (UTC): 14 Feb 2024 12:16"
+    },
+    {
+      "resource_id": "CS-3378",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": null,
+      "notes": "Support; Linked to customer; Created (UTC): 03 Jun 2024 09:27"
+    },
+    {
+      "resource_id": "FIN-7742",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": "Active",
+      "observed_at": null,
+      "notes": "Finance; Linked to customer; Created (UTC): 22 Aug 2024 15:03"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "10 Mar 2026",
+      "notes": "Metadata reviewed"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "22 Aug 2024",
+      "notes": "Finance link added"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "03 Jun 2024",
+      "notes": "Support link added"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "14 Feb 2024",
+      "notes": "Support link added"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "11 Jan 2024",
+      "notes": "Reference created"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Reference created; Recorded"
+    },
+    {
+      "resource_id": "ORD-20263245",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Order link added"
+    },
+    {
+      "resource_id": "CS-3245",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Support links added; CS-3245, CS-3378"
+    },
+    {
+      "resource_id": "CS-3378",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Support links added; CS-3245, CS-3378"
+    },
+    {
+      "resource_id": "FIN-7742",
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Finance link added"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": "user_17",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Metadata reviewed; Recorded"
+    }
+  ]
+}

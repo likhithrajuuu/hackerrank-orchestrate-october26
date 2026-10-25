@@ -92,23 +92,79 @@ number of workers, and the iteration order of sets and dictionaries must never c
 **Fix:** every output has one canonical order (D-014): cases by `case_id`, assessments by system and resource id, and later
 the steps by phase, then the operation order in the problem statement, then system id, then resource id.
 `code/tests/check_determinism.py` runs 92 cases in original, reversed and shuffled order with 1 and 8 workers and demands
-identical results. The step builder itself is not built yet and will be held to the same test.
+identical results. The planner was built later and is covered by the same test.
 
 ### 8. Fixes have to be applied in dependency order
 Deleting a record while the sync that feeds it is still running, or while a backup can still restore it, only brings the
 record back. The safe order is: disable data flows, then block restores, then change records (delete, then redact, then
 anonymize), then verify. This is also the order the problem statement requires ("disable data flows and block unsafe
-restores before changing dependent records"). Planned as the dependency-aware planner in D-013; **not built yet**.
+restores before changing dependent records"). Built as the dependency-aware planner (D-013, D-018).
 
 ### 9. The AI can hallucinate
 Two real examples are issues 3 and 4: a retained audit record called a leftover, and a backup recommended for deletion. A
 chat model can also invent a case, resource or evidence id that looks right. Measures in place (D-012, D-015): the AI never
 produces statuses, findings or steps; its structured answers are schema-validated; low-confidence answers escalate to the
-second model; and the chat flags any id in an answer that no tool returned (`[unverified]`). The step validator will check
+second model; and the chat flags any id in an answer that no tool returned (`[unverified]`). The step validator (built) checks
 that every cited id exists and was captured at or before `audit_at`.
 
-### 10. Provider-side prompt caching is not happening
+### 10. Provider-side prompt caching was not happening (fixed)
 Asked to make sure prompt caching works, I measured it: two live chat turns, 800 and 911 input tokens each,
 `provider_cached = 0`. The provider's automatic prompt cache needs a shared prefix of about 1,024 tokens or more, and these
-prompts are below it (the intent classifier prompt is about 380 tokens). The only caching that is really saving money is our
-own response cache. See D-016 for what was done and why the prompts are not padded.
+prompts were below it (the intent prompt was about 380 tokens). My first answer was to leave it, which was wrong: you wanted
+it working.
+
+**Fix:** the prompts were made long enough with content that helps: a decision procedure and 17 synthetic labeled examples
+for the intent model, and a glossary for the chat. A test now protects the layout (fixed system prompt first, customer's text
+last, at least 4,096 characters). Measured afterwards: 88% of input tokens cached on repeated intent calls, about 90% over the
+final run, and 90 to 99% on chat turns. The results did not change (`output.csv` byte-identical).
+
+**What it cost:** total input tokens rose about 3.4 times (8,766 to about 29,000 in the final run). Whether that is cheaper
+overall depends on the discount for cached tokens, which I have not verified. See D-016.
+
+### 11. The first screenshot model refused one image, and the reader crashed on it
+`gpt-4o` answered "I'm sorry, I can't assist with that." for the object-storage screenshot (`evidence_46`), which lists
+customer file names. The reader then did `json.loads(None)` and failed, and because it was retried on every run it also made
+runs slow. The same reader called the API directly, so its usage was missing from the ledger, and its cache was keyed by
+file id, which would serve a stale extraction if a screenshot were ever replaced.
+
+**Fix:** screenshots now go to the escalation model (as D-001 intended) through the gateway, with retries, the circuit breaker
+and the ledger; the cache is keyed by the image's content hash. All 11 screenshots read. See D-018.
+
+### 12. Screenshots add things that are not resources
+Reading the screenshots with the new model added "resources" such as `CS-3245`, `FIN-7742` and `ORD-20263245` (support case,
+finance and order numbers shown on screen). They are not resources of any system and showed up as unresolved noise.
+**Fix:** only the resource kinds we model count as discovered.
+
+### 13. 34 of the 111 labeled resources are never discovered
+They are 14 accounts seen only in one activity row, 12 identifier-less records in an export that several cases share, 4 audit
+records only in a snapshot captured after `audit_at`, and 4 in no readable evidence. I measured the one candidate rule that
+could be sound (link an account when exactly one deletion row fits): right 8 of 8, but it assigns only 37 of 550 cases
+because 464 of 550 cases share a `reported_at`. Not adopted. The cost is 36 of the 193 labeled steps. See D-018 and the
+evaluation report.
+
+### 14. A fresh checkout could not start: empty `.env.example` values crashed the settings, and the README overclaimed
+Testing the clean-checkout path found two problems. Copying `.env.example` (which has empty price lines) made `float("")`
+raise, so startup failed. And I had written that no key is needed to reproduce `output.csv`, which is only true with a
+placeholder key: with no key at all the run stops with a configuration error.
+
+**Fix:** empty values now mean "not configured"; `.env.example` names the two models; the README says exactly what was
+verified (a placeholder key and an unreachable endpoint reproduce a byte-identical `output.csv`). Both are covered by tests.
+
+### 15. Changing the cache key orphaned the cache
+Adding image support to the gateway changed the response-cache key format, so every earlier cached answer stopped matching
+and the "final run" re-asked the model (23 calls instead of 0). It cost about 8.8k tokens, but it would have made the
+committed cache useless. **Fix:** the orphaned entries were deleted and the final run repopulated the cache, so the committed
+cache reproduces the final run with 0 calls. Lesson: bump the cache version deliberately and regenerate the cache in the same
+change.
+
+
+### 16. Another process was writing to the same ledger and cache
+While I was measuring usage, extra chat rows and an extra intent call kept appearing in the usage ledger "after the final
+run". The cause was not a bug in the pipeline: a chat session in another terminal (probably yours, testing prompt caching)
+was writing to the same `code/cache/usage.jsonl` and the same response cache. A marker line in the ledger cannot tell two
+concurrent processes apart, and my own habit of snapshotting and restoring the ledger could have dropped some of that
+session's rows.
+
+**Fix:** every ledger row is now tagged with the run it belongs to (`run: "final-run"` for the process that writes
+`output.csv`), and the usage report counts exactly those rows. Chat and other processes are reported separately as
+development usage. I stopped restoring the ledger. Covered by a test that writes from two ledgers into one file.

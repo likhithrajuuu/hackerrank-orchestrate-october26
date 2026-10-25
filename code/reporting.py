@@ -52,6 +52,16 @@ def render_case(final: dict) -> str:
                          f"{'  finding ' + a.finding_op if a.finding_op else ''}"
                          f"{'  fix ' + a.remediation_op if a.remediation_op else ''}"
                          f"{'  REVIEW' if a.needs_review else ''}")
+    plan = final.get("plan")
+    if plan:
+        lines.append(f"plan    : {plan.status}, {len(plan.steps)} steps")
+        for st in plan.steps:
+            lines.append(f"          {st.step_no:2d} {st.phase[:4]} {st.system_id:18s} {st.resource_id:20s} {st.operation:26s}"
+                         f"{' [' + st.evidence_id + ']' if st.evidence_id else ''}")
+        for note in plan.notes:
+            lines.append(f"          note: {note}")
+    for problem in final.get("validation", ()):
+        lines.append(f"          {problem.severity.upper()}: {problem.message}")
     lines.append(f"result  : {result.status}  flags={list(result.flags)}")
     return "\n".join(lines)
 

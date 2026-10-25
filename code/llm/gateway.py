@@ -1,7 +1,10 @@
+import base64
+import hashlib
 import threading
 from dataclasses import dataclass
 from typing import Callable, Generic, Mapping, TypeVar
 
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from .cache import ResponseCache
@@ -45,11 +48,13 @@ class LLMGateway:
         with self._guard:
             return self._key_locks.setdefault(key, threading.Lock())
 
-    def _attempt(self, role: ModelRole, schema: type[T], system: str, user: str, version: str):
+    def _attempt(self, role: ModelRole, schema: type[T], system: str, user: str, version: str,
+                 image: bytes | None = None):
         """One model's try. Returns (value, was_cached, error). Single-flight: concurrent identical requests wait for
         the first to finish and then read its cached answer, so identical work is never paid for twice."""
         model = self._settings.models[role]
-        key = self._cache.key(model.name, model.reasoning_effort, version, schema.__name__, system, user)
+        image_hash = hashlib.sha256(image).hexdigest() if image else ""
+        key = self._cache.key(model.name, model.reasoning_effort, version, schema.__name__, system, user, image_hash)
         with self._lock_for(key):
             cached = self._cache.get(key)
             if cached is not None:
@@ -57,8 +62,12 @@ class LLMGateway:
                 return schema.model_validate(cached), True, None
 
             runnable = self._chats[role].with_structured_output(schema, include_raw=True, method=self._method)
+            human = user if image is None else [
+                {"type": "text", "text": user},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(image).decode()}}]
+            messages = [SystemMessage(system), HumanMessage(human)]
             try:
-                out = self._invokers[role].call(lambda: runnable.invoke([("system", system), ("human", user)]))
+                out = self._invokers[role].call(lambda: runnable.invoke(messages))
             except (CircuitOpenError, TransientLLMError) as exc:
                 return None, False, f"{role.value}: {type(exc).__name__}"
 
@@ -75,7 +84,7 @@ class LLMGateway:
 
     def structured(self, schema: type[T], system: str, user: str, version: str,
                    order: tuple[ModelRole, ...] = DEFAULT_ORDER,
-                   accept: Callable[[T], bool] = lambda value: True) -> LLMResult[T]:
+                   accept: Callable[[T], bool] = lambda value: True, image: bytes | None = None) -> LLMResult[T]:
         """Ask order[0]; move to the next model on failure, unparseable output, or an answer `accept` rejects.
 
         The last model's answer is always returned, so the caller decides how to treat a low-confidence result.
@@ -84,7 +93,7 @@ class LLMGateway:
         errors: list[str] = []
         for role in order:
             final = role == order[-1]
-            value, was_cached, error = self._attempt(role, schema, system, user, version)
+            value, was_cached, error = self._attempt(role, schema, system, user, version, image)
             if error:
                 errors.append(error)
                 continue

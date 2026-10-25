@@ -1,11 +1,10 @@
 """The per-case flow as a LangGraph state graph (DECISIONS.md D-004).
 
-    intent --deletion--> identity --> discovery --> state --> policy --> audit --> finalize
+    intent --deletion--> identity --> discovery --> gaps --> state --> interpret --> policy --> audit --> plan --> validate --> finalize
        |
        +--not deletion--> not_applicable
 
-The planner and validator will extend `finalize`. A case the audit cannot decide stays UNDECIDED and is never
-written to output.csv.
+Without a planner (older, smaller graphs) a deletion case ends as the audit's status with no steps.
 """
 from langgraph.graph import END, START, StateGraph
 
@@ -25,18 +24,23 @@ def _not_applicable(state: CaseState) -> dict:
 
 
 def _finalize(state: CaseState) -> dict:
-    audit = state.get("audit")
+    audit, plan = state.get("audit"), state.get("plan")
     flags = list(_flags(state))
     if audit is not None and audit.needs_review:
         flags.append("audit:needs_review")
-    return {"result": CaseResult(state["request"].case_id, audit.status if audit else "UNDECIDED", flags=tuple(flags))}
+    for kind in ("error", "warning"):
+        if any(p.severity == kind for p in state.get("validation", ())):
+            flags.append(f"validation:{kind}")
+    status = plan.status if plan else (audit.status if audit else "UNDECIDED")
+    return {"result": CaseResult(state["request"].case_id, status, plan.steps if plan else (), tuple(flags))}
 
 
 def _route(state: CaseState) -> str:
     return "deletion" if state["intent"].intent == Intent.DELETION else "not_applicable"
 
 
-def build_graph(intent, identity, discovery, state=None, policy=None, audit=None):
+def build_graph(intent, identity, discovery, state=None, policy=None, audit=None, plan=None, validate=None, gaps=None,
+                interpret=None):
     graph = StateGraph(CaseState)
     graph.add_node("intent", intent)
     graph.add_node("identity", identity)
@@ -47,7 +51,7 @@ def build_graph(intent, identity, discovery, state=None, policy=None, audit=None
     graph.add_conditional_edges("intent", _route, {"deletion": "identity", "not_applicable": "not_applicable"})
     graph.add_edge("identity", "discovery")
     previous = "discovery"
-    for name, agent in (("state", state), ("policy", policy), ("audit", audit)):
+    for name, agent in (("gaps", gaps), ("state", state), ("interpret", interpret if state is not None else None), ("policy", policy), ("audit", audit), ("plan", plan), ("validate", validate)):
         if agent is None:
             continue
         graph.add_node(name, agent)

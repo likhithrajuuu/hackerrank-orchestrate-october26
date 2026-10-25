@@ -1,0 +1,86 @@
+{
+  "file_id": "evidence_46",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "delivery_confirmation_19.pdf",
+      "phone": null,
+      "status": null,
+      "observed_at": "12 Feb 18:42",
+      "notes": "Size: 684 KB; Storage class: Standard; Version: v3; Content type: application/pdf; Encryption: AES-256; Checksum: e71b6d...; Uploader: support-service; Modified: 12 Feb 2026 18:42 UTC; Activity: v3 \u2014 12 Feb 18:42 \u00b7 metadata update; v2 \u2014 12 Feb 18:39 \u00b7 upload complete; v1 \u2014 12 Feb 18:38 \u00b7 object created"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "delivery_confirmation_20.pdf",
+      "phone": null,
+      "status": null,
+      "observed_at": "11 Feb 14:17",
+      "notes": "Size: 712 KB; Storage class: Standard; Version: v1"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "return_label_4821.pdf",
+      "phone": null,
+      "status": null,
+      "observed_at": "10 Feb 09:33",
+      "notes": "Size: 203 KB; Storage class: Standard; Version: v1"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "return_label_4876.pdf",
+      "phone": null,
+      "status": null,
+      "observed_at": "11 Feb 16:05",
+      "notes": "Size: 198 KB; Storage class: Standard; Version: v2"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "invoice_NS-10493.pdf",
+      "phone": null,
+      "status": null,
+      "observed_at": "10 Feb 11:21",
+      "notes": "Size: 318 KB; Storage class: Standard; Version: v1"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "parcel_damage_7713.jpg",
+      "phone": null,
+      "status": null,
+      "observed_at": "12 Feb 10:08",
+      "notes": "Size: 2.4 MB; Storage class: Standard; Version: v1"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "customer_export_2026-02-10.zip",
+      "phone": null,
+      "status": null,
+      "observed_at": "10 Feb 23:14",
+      "notes": "Size: 128 MB; Storage class: Standard; Version: v1"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "customer_export_2026-02-12.zip",
+      "phone": null,
+      "status": null,
+      "observed_at": "12 Feb 21:56",
+      "notes": "Size: 131 MB; Storage class: Standard; Version: v1"
+    }
+  ]
+}

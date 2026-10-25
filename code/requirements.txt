@@ -1,6 +1,8 @@
-pypdf
-openai
-langchain-openai
-langchain-core
-langgraph
-python-dotenv
+# Python 3.12. Pinned to the versions this was built and tested with (installed from this file alone in a fresh venv: pip check clean, all checks pass).
+langchain-core==1.7.0
+langchain-openai==1.7.2
+langgraph==1.2.17
+openai==3.37.0
+pydantic==2.14.1
+pypdf==6.21.2
+python-dotenv==1.2.4

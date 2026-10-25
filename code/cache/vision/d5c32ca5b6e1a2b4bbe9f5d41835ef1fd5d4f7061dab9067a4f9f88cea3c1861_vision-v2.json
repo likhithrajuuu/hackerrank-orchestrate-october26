@@ -1,0 +1,46 @@
+{
+  "file_id": "evidence_04",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": "account_5762",
+      "email": "haruka.s1838@zoho.com",
+      "customer_reference": "user_11",
+      "display_name": "Haruka Sato",
+      "phone": "+81 90 7610 2507",
+      "status": "Silver",
+      "observed_at": "24 Sep 2026 09:14 JST",
+      "notes": "Signup channel: mobile_app; Market: JP; Preferred language: Japanese; Default address: 2-18-4 Kichijoji, Musashino, Tokyo 180-0004; Member since: 12 Jan 2024"
+    },
+    {
+      "resource_id": "ORD-20265762",
+      "email": null,
+      "customer_reference": "user_11",
+      "display_name": null,
+      "phone": null,
+      "status": "Delivered \u00b7 18 Sep",
+      "observed_at": "12 Sep 2026",
+      "notes": "Item: Ceramic coffee set; Qty: 1; Total: JPY 8,900"
+    },
+    {
+      "resource_id": "ORD-20265518",
+      "email": null,
+      "customer_reference": "user_11",
+      "display_name": null,
+      "phone": null,
+      "status": "Returned \u00b7 03 Sep",
+      "observed_at": "28 Aug 2026",
+      "notes": "Item: Travel backpack; Qty: 1; Total: JPY 12,400"
+    },
+    {
+      "resource_id": "support_9538",
+      "email": null,
+      "customer_reference": "user_11",
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "CS-8538 \u00b7 support_9538; 24 Sep: Customer replied to CS-8538; 22 Sep: Support agent responded; 28 Aug: support_9538 created"
+    }
+  ]
+}

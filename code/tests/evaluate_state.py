@@ -20,7 +20,7 @@ from contracts import State
 from evidence import EvidenceStore
 from identity import IdentityIndex
 from loaders import load_activity, load_audit_log, load_identities, load_requests
-from state import StateReconstructor
+from state import StateReconstructor, is_modeled
 
 FINDINGS = [("REPORT_EXPOSED_PII", {State.EXPOSED}), ("REPORT_ACTIVE_DATA_FLOW", {State.ACTIVE}),
             ("REPORT_RESTORE_RISK", {State.RESTORABLE}), ("REPORT_REMAINING_RECORD", {State.PRESENT, State.EXPOSED})]
@@ -53,7 +53,7 @@ def main() -> int:
     for request in load_requests("sample_deletion_requests.csv"):
         subject = index.resolve(request.email, request.audit_at)
         tokens = set(subject.emails) | set(subject.hashes) | set(subject.phones) | {subject.user_id}
-        discovered = {r.resource_id for r in store.for_tokens(tokens, request.audit_at) if r.resource_id}
+        discovered = {r.resource_id for r in store.for_tokens(tokens, request.audit_at) if r.resource_id and is_modeled(r.resource_id)}
         states = {s.resource_id: s for s in reconstructor.reconstruct(discovered, request.audit_at)}
         steps = json.loads(answers[request.case_id]["steps_json"])
         operations: dict[str, set] = {}

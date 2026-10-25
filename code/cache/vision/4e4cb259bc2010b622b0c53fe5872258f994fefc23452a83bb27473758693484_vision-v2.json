@@ -1,0 +1,106 @@
+{
+  "file_id": "evidence_19",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": "analytics_7438",
+      "email": "darwish.omar@icloud.com",
+      "customer_reference": "user_20",
+      "display_name": "Omar Darwish",
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Last 90 days; Sessions: 12; Products viewed: 19; Completed orders: 2; Revenue: USD 167.42; Mobile / Desktop: 67% / 33%; Acquisition: Organic search; Market: AE; Audience: Returning shopper; Interest: Coffee & dining; Last activity: 13 Jul 2026 14:22 UTC; First seen: 21 Apr 2026 09:14 UTC"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "14:22",
+      "notes": "1; Order completed; Ceramic coffee set; USD 84.21; Mobile"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "14:20",
+      "notes": "2; Checkout started; 2 items; USD 84.21; Mobile"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "14:17",
+      "notes": "3; Product viewed; Ceramic coffee set; \u2014; Mobile"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "14:16",
+      "notes": "4; Added to cart; Ceramic coffee set; USD 42.00; Mobile"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "14:12",
+      "notes": "5; Product viewed; Stoneware mug; USD 18.00; Desktop"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "13 Jul",
+      "notes": "6 events in active session"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "08 Jul",
+      "notes": "Order completed \u00b7 USD 83.21"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "30 Jun",
+      "notes": "Product search \u00b7 coffee set"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "22 Jun",
+      "notes": "Campaign opened"
+    }
+  ]
+}

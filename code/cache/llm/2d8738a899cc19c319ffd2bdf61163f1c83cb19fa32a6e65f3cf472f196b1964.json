@@ -1,0 +1,1 @@
+{"thought": "I need the case explanation to identify its resources and evidence, then inspect the relevant resource claims against actual state. I must check policy before stating what needs fixing.", "action": "explain_case", "input": "{\"case_id\":\"case_39\"}"}

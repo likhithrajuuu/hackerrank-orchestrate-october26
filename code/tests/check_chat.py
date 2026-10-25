@@ -15,7 +15,8 @@ from agents.chat_tools import make_tools
 from contracts import CaseResult, DiscoveryResult, Intent, IntentDecision, Source
 from evidence import EvidenceRecord
 from llm.config import LLMSettings, ModelRole, ModelSettings
-from llm.gateway import LLMUnavailable
+from llm.gateway import LLMResult, LLMUnavailable
+from llm.react import ReActStep
 from llm.resilience import CircuitBreaker, PermanentLLMError, ResilientInvoker, RetryPolicy
 from llm.usage import UsageLedger
 from loaders import load_requests
@@ -32,35 +33,35 @@ class HttpError(Exception):
         self.status_code = status_code
 
 
-def tool_call(name, args, call_id="c1"):
-    return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id, "type": "tool_call"}],
-                     usage_metadata={"input_tokens": 50, "output_tokens": 5, "total_tokens": 55})
+class HttpError(Exception):
+    def __init__(self, status_code):
+        super().__init__(f"HTTP {status_code}")
+        self.status_code = status_code
 
 
-def final(text):
-    return AIMessage(content=text, usage_metadata={"input_tokens": 60, "output_tokens": 8, "total_tokens": 68})
+class Gateway:
+    """A scripted ReAct model for the chat. Per role a list of steps; an Exception in the list is raised instead."""
 
+    def __init__(self, primary, escalation=None):
+        self.script = {ModelRole.PRIMARY: list(primary), ModelRole.ESCALATION: list(escalation or [])}
+        self.seen, self.systems, self.roles = [], [], []
 
-class ScriptedModel:
-    """Stands in for a chat model: bind_tools returns itself, invoke replays the script and records what it saw."""
-
-    def __init__(self, *script):
-        self.script, self.seen, self.calls = list(script), [], 0
-
-    def bind_tools(self, tools):
-        return self
-
-    def invoke(self, messages):
-        self.calls += 1
-        self.seen.append(list(messages))
-        item = self.script.pop(0) if len(self.script) > 1 else self.script[0]
+    def structured(self, schema, system, user, version, order=None, accept=None):
+        role = order[0]
+        self.seen.append(user)
+        self.systems.append(system)
+        self.roles.append(role)
+        queue = self.script[role]
+        if not queue:
+            raise LLMUnavailable([f"{role.value}: nothing scripted"])
+        item = queue.pop(0) if len(queue) > 1 else queue[0]
         if isinstance(item, Exception):
             raise item
-        return item
+        return LLMResult(item, role, role.value, False)
 
 
-SETTINGS = LLMSettings(None, {ModelRole.PRIMARY: ModelSettings("luna-test", "high", None),
-                              ModelRole.ESCALATION: ModelSettings("sol-test", "low", None)})
+step = lambda action, text="", thought="next": ReActStep(thought=thought, action=action, input=text)
+say = lambda text: step("final", text, "I can answer now")
 
 
 def echo_tool(x: str) -> str:
@@ -74,97 +75,70 @@ def broken_tool(x: str) -> str:
 
 
 TOOLS = [StructuredTool.from_function(echo_tool), StructuredTool.from_function(broken_tool)]
+agent_for = lambda gw, max_steps=6: ChatAgent(gw, TOOLS, max_steps)
 
+# 1) The model reasons, asks for a tool, the tool runs, and the model answers using its result.
+gw = Gateway([step("echo_tool", '{"x": "hi"}', "I should echo hi"), say("done")])
+agent = agent_for(gw)
+check("thought, action, observation, then the final answer", agent.ask([], "say hi") == "done")
+check("the tool result is fed back to the model as an observation", "Observation: echo:hi" in gw.seen[1])
+check("the system prompt comes first and states the read-only rule", "only read" in gw.systems[0] and "ReAct" in gw.systems[0])
+check("the tools are described to the model, with the fields they take", "- echo_tool:" in gw.systems[0] and "fields: x" in gw.systems[0])
+check("the Thought / Action / Observation of the answer are kept", [t.action for t in agent.last_trace] == ["echo_tool", "final"]
+      and agent.last_trace[0].thought == "I should echo hi" and agent.last_trace[0].observation == "echo:hi")
 
-def agent_for(luna, sol, root, max_steps=6):
-    def invoker(name):
-        return ResilientInvoker(name, RetryPolicy(max_attempts=1), CircuitBreaker(5, 30.0),
-                                sleep=lambda s: None, rng=random.Random(0))
-    ledger = UsageLedger(root / "usage.jsonl")
-    agent = ChatAgent(SETTINGS, {ModelRole.PRIMARY: luna, ModelRole.ESCALATION: sol},
-                      {ModelRole.PRIMARY: invoker("luna"), ModelRole.ESCALATION: invoker("sol")},
-                      TOOLS, ledger, max_steps)
-    return agent, ledger
+# 2) A failing tool, bad input or an unknown tool does not end the conversation.
+gw = Gateway([step("broken_tool", '{"x": "a"}'), step("nope", "{}"), step("echo_tool", "not json"), say("recovered")])
+agent = agent_for(gw)
+check("failures are reported back, not raised", agent.ask([], "q") == "recovered")
+obs = [t.observation for t in agent.last_trace]
+check("the failure, the unknown tool and the bad input are visible to the model",
+      obs[0].startswith("tool error: RuntimeError") and "unknown action" in obs[1] and obs[2].startswith("tool error"))
 
+# 3) A model that never stops calling tools is cut off.
+gw = Gateway([step("echo_tool", f'{{"x": "{i}"}}') for i in range(20)])
+agent = agent_for(gw, max_steps=3)
+check("endless tool calls stop at max_steps", "stopped after 3 tool steps" in agent.ask([], "loop") and len(gw.seen) == 3)
 
-with tempfile.TemporaryDirectory() as tmp:
-    root = Path(tmp)
+# 4) Earlier turns are passed to the model.
+gw = Gateway([say("ok")])
+agent_for(gw).ask([HumanMessage("earlier question"), AIMessage("earlier answer")], "follow-up")
+check("history is included before the new question",
+      "User: earlier question" in gw.seen[0] and "Assistant: earlier answer" in gw.seen[0] and "The user's message:\nfollow-up" in gw.seen[0] and gw.seen[0].index("earlier question") < gw.seen[0].index("follow-up"))
 
-    # 1) The model asks for a tool, the tool runs, and the model answers using its result.
-    luna = ScriptedModel(tool_call("echo_tool", {"x": "hi"}), final("done"))
-    agent, ledger = agent_for(luna, ScriptedModel(final("sol")), root / "a")
-    check("tool call then final answer", agent.ask([], "say hi") == "done")
-    tool_messages = [m for m in luna.seen[1] if isinstance(m, ToolMessage)]
-    check("the tool result is fed back to the model", tool_messages and tool_messages[0].content == "echo:hi")
-    check("the system prompt comes first and states the read-only rule",
-          isinstance(luna.seen[0][0], SystemMessage) and "only read" in luna.seen[0][0].content)
-    check("usage is recorded for both model turns", ledger.summary({})["per_model"]["luna-test"]["calls"] == 2)
+# 5) Failure paths: fall back to the escalation model; both down; permanent errors stop the run.
+gw = Gateway([LLMUnavailable(["primary down"])], [say("from sol")])
+check("primary down: the escalation model answers", agent_for(gw).ask([], "q") == "from sol" and gw.roles == [ModelRole.PRIMARY, ModelRole.ESCALATION])
 
-    # 2) A failing tool or an unknown tool does not end the conversation.
-    luna = ScriptedModel(tool_call("broken_tool", {"x": "a"}), tool_call("nope", {}, "c2"), final("recovered"))
-    agent, _ = agent_for(luna, ScriptedModel(final("sol")), root / "b")
-    check("a failing tool is reported back, not raised", agent.ask([], "q") == "recovered")
-    results = [m.content for m in luna.seen[-1] if isinstance(m, ToolMessage)]
-    check("the failure and the unknown tool are visible to the model",
-          any(r.startswith("tool error: RuntimeError") for r in results) and any("unknown tool" in r for r in results))
+try:
+    agent_for(Gateway([LLMUnavailable(["a"])], [LLMUnavailable(["b"])])).ask([], "q")
+    check("both down raises LLMUnavailable", False)
+except LLMUnavailable as exc:
+    check("both models down: LLMUnavailable names both", exc.errors == ["a", "b"])
 
-    # 3) A model that never stops calling tools is cut off.
-    luna = ScriptedModel(tool_call("echo_tool", {"x": "again"}))
-    agent, _ = agent_for(luna, ScriptedModel(final("sol")), root / "c", max_steps=3)
-    check("endless tool calls stop at max_steps", "stopped after 3 tool steps" in agent.ask([], "loop") and luna.calls == 3)
-
-    # 4) Earlier turns are passed to the model.
-    luna = ScriptedModel(final("ok"))
-    agent, _ = agent_for(luna, ScriptedModel(final("sol")), root / "d")
-    agent.ask([HumanMessage("earlier question"), AIMessage("earlier answer")], "follow-up")
-    check("history is included before the new question",
-          [m.content for m in luna.seen[0][1:]] == ["earlier question", "earlier answer", "follow-up"])
-
-    # 5) Failure paths: fall back to the escalation model; both down; permanent errors stop the run.
-    sol = ScriptedModel(final("from sol"))
-    agent, ledger = agent_for(ScriptedModel(HttpError(503)), sol, root / "e")
-    check("primary down: the escalation model answers", agent.ask([], "q") == "from sol")
-    check("usage is attributed to the escalation model", "sol-test" in ledger.summary({})["per_model"])
-
-    agent, _ = agent_for(ScriptedModel(HttpError(503)), ScriptedModel(HttpError(429)), root / "f")
-    try:
-        agent.ask([], "q")
-        check("both down raises LLMUnavailable", False)
-    except LLMUnavailable as exc:
-        check("both models down: LLMUnavailable names both", len(exc.errors) == 2)
-
-    agent, _ = agent_for(ScriptedModel(HttpError(401)), ScriptedModel(final("never")), root / "g")
-    try:
-        agent.ask([], "q")
-        check("401 propagates", False)
-    except PermanentLLMError:
-        check("a permanent error is not swallowed by the fallback", True)
+try:
+    agent_for(Gateway([PermanentLLMError("401")], [say("never")])).ask([], "q")
+    check("401 propagates", False)
+except PermanentLLMError:
+    check("a permanent error is not swallowed by the fallback", True)
 
 # 5b) Hallucination guard: invented ids are flagged, ids a tool returned are not.
-with tempfile.TemporaryDirectory() as tmp:
-    root = Path(tmp)
-    luna = ScriptedModel(tool_call("echo_tool", {"x": "account_123"}), final("Resource account_123 is fine."))
-    agent, _ = agent_for(luna, ScriptedModel(final("sol")), root / "h1")
-    reply = agent.ask([], "check it")
-    check("an id that a tool returned is not flagged", "[unverified]" not in reply)
+agent = agent_for(Gateway([step("echo_tool", '{"x": "account_123"}'), say("Resource account_123 is fine.")]))
+check("an id that a tool returned is not flagged", "[unverified]" not in agent.ask([], "check it"))
 
-    agent, _ = agent_for(ScriptedModel(final("The leftover is search_9999 and evidence_77.")), ScriptedModel(final("sol")), root / "h2")
-    reply = agent.ask([], "what is left?")
-    check("invented ids are flagged by name", "[unverified]" in reply and "search_9999" in reply and "evidence_77" in reply)
+reply = agent_for(Gateway([say("The leftover is search_9999 and evidence_77.")])).ask([], "what is left?")
+check("invented ids are flagged by name", "[unverified]" in reply and "search_9999" in reply and "evidence_77" in reply)
 
-    agent, _ = agent_for(ScriptedModel(final("You asked about case_14, which I did not look up.")), ScriptedModel(final("sol")), root / "h3")
-    check("an id the user wrote is not flagged", "[unverified]" not in agent.ask([], "tell me about case_14"))
+check("an id the user wrote is not flagged",
+      "[unverified]" not in agent_for(Gateway([say("You asked about case_14, which I did not look up.")])).ask([], "tell me about case_14"))
 
-    luna = ScriptedModel(tool_call("echo_tool", {"x": "backup_55"}), final("First answer about backup_55."),
-                         final("Still backup_55, as before."))
-    agent, _ = agent_for(luna, ScriptedModel(final("sol")), root / "h4")
-    first = agent.ask([], "look at it")
-    second = agent.ask([HumanMessage("look at it"), AIMessage(first)], "and again?")
-    check("an id verified earlier in the session stays verified", "[unverified]" not in second)
+agent = agent_for(Gateway([step("echo_tool", '{"x": "backup_55"}'), say("First answer about backup_55."), say("Still backup_55, as before.")]))
+first = agent.ask([], "look at it")
+second = agent.ask([HumanMessage("look at it"), AIMessage(first)], "and again?")
+check("an id verified earlier in the session stays verified", "[unverified]" not in second)
 
-    agent, _ = agent_for(ScriptedModel(final("The service names account_service and search_service are not ids.")),
-                         ScriptedModel(final("sol")), root / "h5")
-    check("system names such as account_service are not mistaken for ids", "[unverified]" not in agent.ask([], "q"))
+check("system names such as account_service are not mistaken for ids",
+      "[unverified]" not in agent_for(Gateway([say("The service names account_service and search_service are not ids.")])).ask([], "q"))
 
 # 6) The real tools, with a stubbed case graph so no evidence is loaded and no model is called.
 samples = {r.case_id: r for r in load_requests("sample_deletion_requests.csv")}
@@ -242,5 +216,78 @@ policy = tools["deletion_policy"].invoke({})
 check("the policy tool lists every rule and says retained records are not deleted",
       policy.count("rule_") >= 15 and "BACKUP_ARCHIVE: RETAIN" in policy and "must NOT be deleted" in policy)
 check("every tool has a description for the model", all(t.description for t in tools.values()))
+
+# 7) Web search (Exa) is chat-only background: masked queries, labeled results, no key leakage, no part in the audit (D-024).
+import io
+import json as _json
+import urllib.error
+from websearch import ExaSearch, WebSearchError, render as render_web
+
+SECRET = "exa-secret-key-123"
+sent = {}
+
+
+class FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def fake_open(request, timeout=None):
+    sent["body"] = _json.loads(request.data.decode())
+    sent["key"] = request.headers.get("X-api-key")
+    return FakeResponse(_json.dumps({"results": [{"title": "GDPR Art. 17", "url": "https://eur-lex.example/17",
+                                                   "text": "Right to  erasure\n applies unless a legal obligation"}]}).encode())
+
+
+ex = ExaSearch(SECRET, opener=fake_open)
+found = ex.search("what does erasure mean for jain.aditi@gmail.com +34 668 324 642 33f407a3689b1b57bdb15b492e565867a507c27ce066c1d6a584f03f4dbb5565")
+check("the query is masked before it is sent: no email, phone or hash leaves the machine",
+      "@" not in sent["body"]["query"] and "668" not in sent["body"]["query"] and "33f407" not in sent["body"]["query"]
+      and "<email>" in sent["body"]["query"])
+check("the key goes in a header, never in the body", sent["key"] == SECRET and SECRET not in _json.dumps(sent["body"]))
+check("results are parsed and whitespace collapsed", found[0]["title"] == "GDPR Art. 17" and "\n" not in found[0]["text"])
+check("rendered results are labeled external and not evidence", "EXTERNAL" in render_web(found, "q") and "not evidence" in render_web(found, "q"))
+
+
+def failing_open(request, timeout=None):
+    raise urllib.error.HTTPError("https://api.example", 401, f"bad key {SECRET}", {}, io.BytesIO(SECRET.encode()))
+
+
+try:
+    ExaSearch(SECRET, opener=failing_open).search("q")
+    check("an HTTP error becomes WebSearchError", False)
+except WebSearchError as exc:
+    check("an HTTP error becomes WebSearchError, and the message never contains the key", "401" in str(exc) and SECRET not in str(exc))
+try:
+    ExaSearch(SECRET, opener=lambda r, timeout=None: (_ for _ in ()).throw(TimeoutError())).search("q")
+    check("a timeout becomes WebSearchError", False)
+except WebSearchError:
+    check("a timeout becomes WebSearchError", True)
+check("no key configured means no search client", ExaSearch.from_env({}) is None and ExaSearch.from_env({"EXA_API_KEY": " "}) is None)
+check("a quoted key and URL from a .env file are cleaned",
+      ExaSearch.from_env({"EXA_API_KEY": '"abc"', "EXA_API_URL": '"https://x.test/search"'})._url == "https://x.test/search")
+
+base = lambda web: {t.name for t in make_tools(samples, lambda: None, lambda: None, None, UsageLedger(Path(tempfile.mkdtemp()) / "u.jsonl"), {}, web)}
+check("without a key the chat has no web_search tool, with one it does", "web_search" not in base(None) and "web_search" in base(ex))
+
+web_tool = {t.name: t for t in make_tools(samples, lambda: None, lambda: None, None, UsageLedger(Path(tempfile.mkdtemp()) / "u.jsonl"), {},
+                                          ExaSearch(SECRET, opener=failing_open))}["web_search"]
+check("a failing search is reported to the model, not raised", web_tool.invoke({"query": "x"}).startswith("web search unavailable"))
+
+agent = ChatAgent(Gateway([step("web_search", '{"query": "erasure"}'), say("Per the web, case_77 shows this.")]),
+                  [StructuredTool.from_function(lambda query: "EXTERNAL web text mentioning case_77", name="web_search",
+                                                description="search the web")])
+check("an id that appears only in web text is not treated as verified", "[unverified]" in agent.ask([], "what does erasure mean?") and "case_77" in agent.last_trace[0].observation)
+
+# The audit must never depend on the web: only the composition root and the chat tools may mention the search module.
+import re as _re
+allowed = {"bootstrap.py", "chat_tools.py", "websearch.py"}
+offenders = [str(p.relative_to(Path(__file__).resolve().parent.parent)) for p in Path(__file__).resolve().parent.parent.rglob("*.py")
+             if "tests" not in p.parts and ".venv" not in p.parts and p.name not in allowed
+             and _re.search(r"websearch|ExaSearch|api\.exa\.ai|EXA_API", p.read_text(encoding="utf-8"))]
+check("no audit module (intent, identity, evidence, state, policy, audit, plan, validate) refers to web search", not offenders)
 
 print("chat checks passed")

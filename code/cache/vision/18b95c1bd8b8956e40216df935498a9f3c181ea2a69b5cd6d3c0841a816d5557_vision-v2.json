@@ -1,0 +1,46 @@
+{
+  "file_id": "evidence_23",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": "export_1261",
+      "email": "marcus.lee@northstar.shop",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Collecting",
+      "observed_at": "20 Jun 14:18 UTC",
+      "notes": "Filename: customer_export_1261.zip"
+    },
+    {
+      "resource_id": "export_1260",
+      "email": "ingrid.dahl@outlook.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Ready",
+      "observed_at": "18 Jun 2026 06:42 UTC",
+      "notes": "Filename: customer_export_1260.zip; Created (table): 18 Jun 06:42 UTC; Expires: 25 Jun 2026 06:42 UTC; Size: 18.4 MB; Checksum: SHA-256 \u00b7 41ca09...; Download count: 0; Included: Profile \u00b7 Orders \u00b7 Saved addresses; Activity: 06:46 Ready for download; 06:45 Package created; 06:43 Collecting customer records; 06:42 Export requested"
+    },
+    {
+      "resource_id": "export_1259",
+      "email": "sara.kim@northstar.shop",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Packaging",
+      "observed_at": "17 Jun 11:03 UTC",
+      "notes": "Filename: customer_export_1259.zip"
+    },
+    {
+      "resource_id": "export_1258",
+      "email": "daniel.park@northstar.shop",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Ready",
+      "observed_at": "16 Jun 09:27 UTC",
+      "notes": "Filename: customer_export_1258.zip"
+    }
+  ]
+}

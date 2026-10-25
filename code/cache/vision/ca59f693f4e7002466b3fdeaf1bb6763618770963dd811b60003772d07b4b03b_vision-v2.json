@@ -1,0 +1,76 @@
+{
+  "file_id": "evidence_37",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": "audit_record_003",
+      "email": null,
+      "customer_reference": "user_03",
+      "display_name": null,
+      "phone": null,
+      "status": "Valid",
+      "observed_at": "25 Aug 04:03",
+      "notes": "Account closure recorded; Account lifecycle; Automated workflow"
+    },
+    {
+      "resource_id": "audit_record_002",
+      "email": null,
+      "customer_reference": "user_03",
+      "display_name": null,
+      "phone": null,
+      "status": "Valid",
+      "observed_at": "25 Aug 03:21",
+      "notes": "Session revoked; Session management; Security system"
+    },
+    {
+      "resource_id": "audit_record_001",
+      "email": null,
+      "customer_reference": "user_03",
+      "display_name": null,
+      "phone": null,
+      "status": "Valid",
+      "observed_at": "24 Aug 16:14",
+      "notes": "Recovery challenge completed; Authentication; User (self)"
+    },
+    {
+      "resource_id": "audit_record_006",
+      "email": null,
+      "customer_reference": "user_03",
+      "display_name": null,
+      "phone": null,
+      "status": "Valid",
+      "observed_at": "22 Aug 11:27",
+      "notes": "Email change confirmed; Profile update; User (self)"
+    },
+    {
+      "resource_id": "audit_record_005",
+      "email": null,
+      "customer_reference": "user_03",
+      "display_name": null,
+      "phone": null,
+      "status": "Valid",
+      "observed_at": "20 Aug 09:42",
+      "notes": "Login from new device; Authentication; User (self)"
+    },
+    {
+      "resource_id": "audit_record_004",
+      "email": null,
+      "customer_reference": "user_03",
+      "display_name": null,
+      "phone": null,
+      "status": "Valid",
+      "observed_at": "18 Aug 14:05",
+      "notes": "Password changed; Authentication; User (self)"
+    },
+    {
+      "resource_id": "audit_record_003",
+      "email": null,
+      "customer_reference": "user_03",
+      "display_name": null,
+      "phone": null,
+      "status": "Valid",
+      "observed_at": "2026-08-25T04:03:00Z",
+      "notes": "event_type: account_closure_recorded; actor: automated account workflow; fingerprint: 8f0c...31ad; journal: 2026-Q3"
+    }
+  ]
+}

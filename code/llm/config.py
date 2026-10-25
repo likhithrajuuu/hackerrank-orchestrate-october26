@@ -40,6 +40,12 @@ class LLMSettings:
         return {m.name: (m.price_in_per_m, m.price_out_per_m) for m in self.models.values()}
 
 
+def _number(env: Mapping[str, str], key: str) -> float:
+    """A price from the environment. Unset or empty (as in a copied .env.example) means 'not configured': 0."""
+    value = env.get(key, "").strip()
+    return float(value) if value else 0.0
+
+
 def load_settings(env: Mapping[str, str] = os.environ) -> LLMSettings:
     """Read everything from environment variables. Nothing is hardcoded and no key is ever stored."""
     def one(prefix: str, default_effort: str) -> ModelSettings:
@@ -50,8 +56,8 @@ def load_settings(env: Mapping[str, str] = os.environ) -> LLMSettings:
             name=env[f"{prefix}_MODEL"],
             reasoning_effort=env.get(f"{prefix}_EFFORT", default_effort) or None,
             temperature=None if raw in ("", "none", "off") else float(raw),   # "none" = do not send a temperature
-            price_in_per_m=float(env.get(f"{prefix}_PRICE_IN", 0)),
-            price_out_per_m=float(env.get(f"{prefix}_PRICE_OUT", 0)),
+            price_in_per_m=_number(env, f"{prefix}_PRICE_IN"),
+            price_out_per_m=_number(env, f"{prefix}_PRICE_OUT"),
         )
 
     api_key_env = next((name for name in ("LLM_API_KEY", "OPENAI_API_KEY") if env.get(name)), None)

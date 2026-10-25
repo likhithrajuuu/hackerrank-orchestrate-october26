@@ -163,4 +163,32 @@ with tempfile.TemporaryDirectory() as tmp:
     check("8 identical simultaneous requests make exactly one model call", luna.calls == 1 and row["calls"] == 1)
     check("the other 7 are served from the cache and agree", row["cache_hits"] == 7 and len({r.value.answer for r in results}) == 1)
 
+# 10b) Ledger rows carry their run, so a run is exact even when another process writes to the same ledger.
+from llm.usage import UsageLedger as _Ledger
+
+shared = Path(tempfile.mkdtemp()) / "shared.jsonl"
+run_a, other = _Ledger(shared, run="final-run"), _Ledger(shared)
+run_a.record("primary", "m", "intent-v3", 100, 5, cached=False)
+other.record("primary", "m", "chat-v2", 900, 20, cached=False)          # a chat session in another terminal
+run_a.record("primary", "m", "intent-v3", 100, 5, cached=False)
+rows = [r for r in _Ledger(shared).rows() if r.get("run") == "final-run"]
+check("only rows tagged with the run are counted as that run, whatever else is written meanwhile",
+      len(rows) == 2 and sum(r["input_tokens"] for r in rows) == 200)
+
+# 11) Settings: a copied .env.example has empty values, which must mean "not configured", not crash.
+from llm.config import ConfigError, load_settings
+
+empty_prices = {"OPENAI_API_KEY": "unused", "LUNA_MODEL": "m1", "SOL_MODEL": "m2", "LLM_BASE_URL": "", "LUNA_PRICE_IN": "",
+                "LUNA_PRICE_OUT": "  ", "SOL_PRICE_IN": "", "SOL_PRICE_OUT": "", "LUNA_EFFORT": "high", "SOL_EFFORT": "low"}
+loaded = load_settings(empty_prices)
+check("empty price lines in a copied .env.example load as 'not configured'",
+      loaded.prices() == {"m1": (0.0, 0.0), "m2": (0.0, 0.0)} and loaded.base_url is None)
+check("a real price is read", load_settings({**empty_prices, "LUNA_PRICE_IN": "0.11"}).prices()["m1"] == (0.11, 0.0))
+check("the placeholder key path loads (cache-only reproduction)", loaded.api_key_env == "OPENAI_API_KEY")
+try:
+    load_settings({k: v for k, v in empty_prices.items() if k != "OPENAI_API_KEY"})
+    check("no key at all is a configuration error", False)
+except ConfigError:
+    check("no key at all is a configuration error", True)
+
 print("gateway checks passed")

@@ -46,6 +46,8 @@ LINKING_REFERENCES = {"user_id", "customer_reference"}
 SEVERITY = [State.EXPOSED, State.ACTIVE, State.RESTORABLE, State.PRESENT, State.DEIDENTIFIED,
             State.RESTORE_BLOCKED, State.DISABLED, State.ABSENT]
 
+EXISTS_FAMILY = {State.PRESENT, State.EXPOSED, State.DEIDENTIFIED}      # all prove that the record exists
+
 LEDGER_RESULTS = {"FOUND": State.PRESENT, "NOT_FOUND": State.ABSENT, "ACTIVE": State.ACTIVE, "DISABLED": State.DISABLED,
                   "BLOCKED": State.RESTORE_BLOCKED, "IDENTIFIABLE": State.EXPOSED, "REDACTED": State.DEIDENTIFIED,
                   "ANONYMIZED": State.DEIDENTIFIED}
@@ -53,6 +55,12 @@ LEDGER_RESULTS = {"FOUND": State.PRESENT, "NOT_FOUND": State.ABSENT, "ACTIVE": S
 
 def prefix_of(resource_id: str) -> str:
     return re.sub(r"_?\d+$", "", resource_id)
+
+
+def is_modeled(resource_id: str) -> bool:
+    """True for the resource kinds we model. Screenshots also show support case and order numbers (CS-..., ORD-...),
+    which are not resources of any system and must not be treated as discovered resources."""
+    return prefix_of(resource_id) in PREFIXES
 
 
 def _blank(value) -> bool:
@@ -274,8 +282,12 @@ def reduce_resource(resource_id: str, observations: list[Observation], claims: t
     chosen = sorted((o for o in tied if o.state == state), key=lambda o: (o.file_id, o.source))[0]
     # The state comes from the latest observation, but a file captured after audit_at may not be cited. In that case
     # cite the most recent citable observation that shows the same state.
-    citable_support = [o for o in observations if o.state == state and o.captured_at <= audit_at]
-    cited = max(citable_support, key=lambda o: (o.when, o.file_id, o.source)) if citable_support else None
+    citable = [o for o in observations if o.captured_at <= audit_at]
+    support = [o for o in citable if o.state == state]
+    if not support and state == State.PRESENT:
+        # "The record exists" is proven by any citable observation of an existing record, whatever it held at the time.
+        support = [o for o in citable if o.state in EXISTS_FAMILY]
+    cited = max(support, key=lambda o: (o.when, o.file_id, o.source)) if support else None
     return ResourceState(resource_id, system_id, chosen.category or category, state,
                          cited.file_id if cited else "", cited is not None, chosen.observed_at, len(states) > 1,
                          tuple(sorted(observations, key=lambda o: (o.when, o.file_id, o.source))), claims)

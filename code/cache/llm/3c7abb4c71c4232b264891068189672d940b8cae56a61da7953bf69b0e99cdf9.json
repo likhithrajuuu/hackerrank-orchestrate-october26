@@ -1,0 +1,1 @@
+{"thought": "The record states the data flow is in continuous mode, which is evidence that it is set to run. I can answer ACTIVE without relying on the activity-log entries.", "action": "final", "input": "{\"state\":\"ACTIVE\",\"confidence\":\"high\",\"quote\":\"Mode: Continuous\",\"reason\":\"The process is configured for continuous syncing.\"}"}

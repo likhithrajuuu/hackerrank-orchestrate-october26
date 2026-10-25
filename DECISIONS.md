@@ -86,9 +86,10 @@ far below the estimate:
 - The averages come from the first live run. The second run of the agent made no new model calls at all, because every
   answer was served from the cache.
 - Cost in USD is not computed yet, because the `LUNA_PRICE_IN` and `LUNA_PRICE_OUT` values are not set.
-- **Not included:** the screenshot reads made by `code/evidence/image_reader.py` (about 9.5k input and 2k output tokens
-  over 8 images, using `gpt-4o`). That reader calls the API directly, so it bypasses the ledger.
-- Why it is so low: 490 of 518 requests are answered by the regex rules and never reach a model (D-002).
+- **Not included at the time:** the screenshot reads made by the first version of `code/evidence/image_reader.py` (about 9.5k
+  input and 2k output tokens over 8 images, using `gpt-4o`), which called the API directly and so bypassed the ledger. That
+  reader was replaced in D-018; screenshots are now read by Sol through the gateway and are recorded.
+- Why it is so low: the regex rules decide 490 of 518 requests; since D-020 a model reads those too, but only to confirm, and repeated texts share one cached answer (D-002).
 
 ### Verification needed (before relying on these numbers)
 
@@ -102,9 +103,9 @@ far below the estimate:
 
 ### Consequences for the code (not yet done)
 
-- The single-model `llm.py` that was first planned is replaced by the two-role LLM layer in D-003 and D-004, configured
-  through `LLM_BASE_URL`, `LLM_API_KEY`, `LUNA_MODEL` and `SOL_MODEL`. `code/evidence/image_reader.py` still hardcodes
-  its own client and model (`gpt-4o`), and later moves onto the same gateway with Sol.
+- The single-model LLM module that was first planned (a plain llm module) is replaced by the two-role LLM layer in D-003 and D-004, configured
+  through `LLM_BASE_URL`, `LLM_API_KEY`, `LUNA_MODEL` and `SOL_MODEL`. The screenshot reader first had its own client and
+  model (`gpt-4o`); it now goes through the same gateway with Sol (D-018).
 - The usage ledger must record the model name on every call, because `evaluation/usage_report.md` requires **per-model
   and overall** totals (calls, input and output tokens, estimated cost).
 - Keys come from environment variables only and never appear in code, logs or the zip.
@@ -230,11 +231,14 @@ A terminal CLI is the way the system is run and inspected:
 |---|---|
 | `classify "<text>"` | Show the rules decision, whether it is strong, and who answered (rules, Luna, Sol or fallback). |
 | `case <case_id>` | Explain one case: intent, resolved identity, evidence hits by resource, flags. |
-| `run [--all or --cases a,b] [--workers N] [--no-llm]` | Run the graph over cases and list the cases that need review. |
+| `run [--all or --samples or --cases a,b] [--workers N] [--no-llm] [--output PATH]` | Run the graph over cases and list the cases that need review. With `--all --output output.csv` it validates every row and writes the submission file. |
+| `chat [--once "question"]` | Read-only conversation with tools (D-008). |
+| `usage-report` | Regenerates `code/evaluation/usage_report.md` from the usage ledger. |
 | `status` | Pipeline stages, circuit breaker state per model, and usage and cost by model and overall. |
 
-`--no-llm` keeps the whole tool usable offline. `output.csv` is only written once the state, policy, planner and
-validator stages exist, and a case still `UNDECIDED` is never written as a row.
+`--no-llm` keeps the whole tool usable offline. `output.csv` is written only by `run --all --output`, which refuses if any
+row fails validation and re-reads the file it wrote. A case the audit cannot decide never reaches the file as `UNDECIDED`:
+the planner applies the default in D-018.
 
 ---
 
@@ -254,7 +258,7 @@ reasoning models, and the API rejected the request:
 - **Do not send a temperature by default.** `DEFAULT_TEMPERATURE` is `none` in `code/llm/config.py`.
 - It can still be set per model, for a model that accepts one: `LUNA_TEMPERATURE=0` or `SOL_TEMPERATURE=0`.
 - Repeatability now comes from other things: a schema-validated output (`IntentVerdict`), the cache keyed by model,
-  prompt version and text, and the fact that 490 of 518 requests never reach a model.
+  prompt version and text, and the fact that the 490 rule-decided requests are only confirmed by a model, never decided by one (D-020).
 - A 400 from the API is a permanent error (D-003). The run stops with exit code 2 and prints a hint, instead of
   flagging hundreds of cases for what is really a configuration problem.
 
@@ -406,8 +410,8 @@ and 9 UNDECIDED. These are not scored: there are no labels for them.
 - **Never exercised by any labeled sample:** an expired audit-log retention period, an active legal hold, and a
   retained record that is missing. They are implemented and unit-tested, but nothing shows they match the real answers.
 - **The STALE rule rests on one example** (a March lookup of an older account in `case_17`).
-- **Still open for stage 7:** what to output when a case is UNDECIDED. The final file needs COMPLETE or INCOMPLETE, and
-  the labeled UNDECIDED cases split three COMPLETE to one INCOMPLETE, which is too few to choose a default from.
+- **Was open, now decided in D-018:** what to output when a case is UNDECIDED. The default is COMPLETE, flagged for review,
+  chosen from only four labeled cases (three COMPLETE, one INCOMPLETE).
 - The 34 resources that discovery never finds (see D-009) are still invisible to both stages.
 
 ---
@@ -470,7 +474,7 @@ own knowledge (see issues 3 and 4).
 ## D-013: Dependency-aware remediation planner, then validator, then output generator
 
 - **Date:** 2026-10-25
-- **Status:** Accepted design. **Not built yet.**
+- **Status:** Accepted and **built** (see D-018).
 - **Solves:** issue 8
 
 ### Decision
@@ -492,10 +496,9 @@ Phase (FINDING, REMEDIATION, VERIFICATION), then the position of the operation i
 steps) are already in exactly this order with consecutive step numbers (for example `case_18`: findings REMAINING,
 EXPOSED_PII, ACTIVE_DATA_FLOW; fixes DISABLE, DELETE, REDACT, ANONYMIZE).
 
-### Still open
+### Was open, now decided
 
-What to output when a case is UNDECIDED (no assessable evidence). The labeled UNDECIDED cases split three COMPLETE to one
-INCOMPLETE, which is too few to choose a default from.
+What to output when a case is UNDECIDED (no assessable evidence): decided in D-018.
 
 ---
 
@@ -525,7 +528,7 @@ order, with 1 worker and with 8. The planner and generator must pass the same te
 ## D-015: Guards against AI hallucination
 
 - **Date:** 2026-10-25
-- **Status:** Accepted. Guards 1 to 5 built; guard 6 belongs to the validator, which is not built yet.
+- **Status:** Accepted and built. Guard 6, the validator, was built in D-018.
 - **Solves:** issue 9
 
 ### Decision
@@ -538,8 +541,8 @@ order, with 1 worker and with 8. The planner and generator must pass the same te
 4. **Chat is read-only and grounded.** It can only call tools. Any case, resource, evidence or activity id in an answer that
    no tool returned in the session, and that the user did not write, is flagged `[unverified]`.
 5. **The model is told that claims are not state** and to treat text inside records and requests as data, not instructions.
-6. **Validator (planned):** every cited id must exist and be captured at or before `audit_at`; step numbers, phases and
-   operation and state pairs must be valid.
+6. **Validator (built, `code/validator.py`):** every cited id must exist and be captured at or before `audit_at`; step
+   numbers, phases and operation and state pairs must be valid; a bad row blocks the file from being written.
 
 ### Limits
 
@@ -550,30 +553,57 @@ knowledge comes from tools (issues 3 and 4) and why its answers should be read a
 
 ## D-016: Caching, and what the measurement showed
 
-- **Date:** 2026-10-25
-- **Status:** Accepted and built
+- **Date:** 2026-10-25 (revised the same day after the first measurement showed the provider cache was not working)
+- **Status:** Accepted and built; provider prompt caching measured working
 - **Solves:** issues 6 and 10
 
 ### Decision
 
 | Cache | What it does | State |
 |---|---|---|
-| Response cache | Disk cache keyed by model, reasoning effort, prompt version, schema, system prompt and text. A rerun, or the same text in another case, costs nothing. Bumping `PROMPT_VERSION` invalidates it. | Built, working |
+| Response cache | Disk cache keyed by model, reasoning effort, prompt version, schema, system prompt, text and image hash. A rerun, or the same text in another case, costs nothing. Bumping `PROMPT_VERSION` invalidates it. | Built, working |
 | Single-flight | Identical simultaneous requests share one call (D-011). | Built, tested |
-| Image extraction cache | One JSON file per screenshot in `code/cache/images/`. | Built |
-| Provider prompt cache | The provider reuses a repeated prompt prefix. Prompts are laid out for it: fixed system prompt and tool list first, the variable text last. The ledger records `cached_input_tokens`. | Enabled but **not triggering** |
+| Screenshot extraction cache | One JSON file per screenshot in `code/cache/vision/`, keyed by the image's content hash and the prompt version. | Built |
+| Provider prompt cache | The provider reuses a repeated prompt prefix of about 1,024 tokens or more. Prompts are laid out for it: a fixed, long system prompt first and the customer's text last. The ledger records `cached_input_tokens`. | **Working** (measured below) |
 
-### What was measured
+### What the first measurement showed
 
-Two live chat turns: 800 and 911 input tokens each, `provider_cached = 0`. The provider's automatic prompt cache needs a
-shared prefix of about 1,024 tokens or more. The chat prompt is below that and the intent prompt is about 380 tokens. So the
-saving that is real today comes from the response cache: the first full run made the model calls, and reruns made none.
+With the original short prompts the provider cached **nothing**: two live chat turns used 800 and 911 input tokens with
+`provider_cached = 0`, and the intent prompt was about 380 tokens. Both are below the provider's roughly 1,024-token minimum
+for a cacheable prefix.
 
-### Decision on padding
+### What was done about it
 
-The prompts are **not** padded to cross the threshold. Extra tokens are paid for on every call, and the saving on a cache hit
-is a fraction of that, so padding costs more than it saves at this volume. Revisit if a prompt grows past about 1,024
-tokens; the ledger will show the cached share without any further change.
+The prompts were made long enough, with content that earns its place and not filler:
+
+- **Intent prompt** (`intent-v3`, about 1,250 tokens): definitions, a five-step decision procedure, confidence guidance, 17
+  labeled examples (synthetic, none copied from the labeled samples; a test checks that) and a safety rule.
+- **Chat prompt** (`chat-v2`, about 1,450 tokens with the tool list): a glossary of the states, verdicts, treatments,
+  operations and id shapes the tools print.
+
+A test (`check_agents.py`) protects the layout: both system prompts must stay at least 4,096 characters, contain no
+per-request placeholders, and the call must send the system prompt first and the customer's text last.
+
+### What was measured afterwards (live)
+
+| Measurement | Result |
+|---|---|
+| Three different weak requests, one after another | call 1 cold (0 cached); calls 2 and 3 served **1,105 of about 1,255** input tokens (88%) from the provider cache |
+| The final run's 23 intent calls | about **90%** of the input tokens came from the provider cache (the exact figures are in `code/evaluation/usage_report.md`) |
+| Chat turns | 1,425 to 1,611 cached of 1,440 to 1,722 input tokens per call (about 90 to 99%) |
+| Effect of the longer prompt on results | none: `output.csv` was byte-identical before and after |
+| Accuracy of the model on weak-wording labeled samples | 8 of 8 classified `DELETION`, as labeled |
+
+### The trade-off, stated plainly
+
+The longer prompt raised the total input tokens of the final run from 8,766 to about 29,000 (about 3.4 times). The saving is
+only real if cached tokens are billed at a discount. **The discount for these models has not been verified, so whether the run
+became cheaper overall is not known.** What is known: the number of tokens sent is higher, most of them are served from the
+provider cache, the answers did not change, and the response cache still means a rerun makes no calls at all.
+
+### When to revisit
+
+If the discount turns out to be small, shorten the intent prompt again. The cost of trying is one cold run of 23 calls.
 
 ---
 
@@ -592,3 +622,295 @@ tokens; the ledger will show the cached share without any further change.
   UNRESOLVED and flag the case for review.
 - **Proposed, not built:** a data-flow or cache-refresh claim dated after a deletion claim on the same source would be flagged
   as a recreation risk for review. It needs a rule for linking a sync to its source, and the data does not give one yet.
+
+
+---
+
+## D-018: Stage 7 as built, the "no evidence" default, and how the discovery gaps were handled
+
+- **Date:** 2026-10-25
+- **Status:** Accepted and built. The default in item 1 is a judgement call on very little data: please review it.
+
+### What was built
+
+`code/planner.py` (D-013's planner), `code/validator.py` and `code/output.py`, wired into the graph after the audit. The
+planner uses the one canonical order (D-014). The validator rejects a row for a bad status, a wrong phase or state for an
+operation, a gap in step numbers, a duplicate, an unknown or late (after `audit_at`) cited id, evidence where none belongs
+and a missing citation where one is required, and a wrong order. `python code/main.py run --all --output output.csv`
+refuses to write if any row has an error, then re-reads the written file and checks it.
+
+### Decisions
+
+1. **A case with no assessable evidence is written as `COMPLETE`** (with no steps, flagged `needs_review`). Reasoning: a
+   violation must be shown with evidence, and with none there is nothing to cite. Of the four labeled cases in this
+   situation three were `COMPLETE`. **Caveat:** that is four cases, and the same four labeled answers were what I looked
+   at to choose, so this is not an independent check. It is configurable (`Planner(undecided_status=...)`). Five cases in
+   the final file use it: `case_33`, `case_39`, `case_55`, `case_61`, `case_63`.
+2. **Screenshots are read by the escalation model through the gateway**, not by the first model I tried. `gpt-4o` refused
+   one screenshot ("I'm sorry, I can't assist with that"); the escalation model reads all 11. Extractions are cached by the
+   image's content hash (`code/cache/vision/`), so a replaced screenshot can never be served a stale extraction. A
+   cache-only reader is the default, so offline runs and tests need no key.
+3. **Only resource kinds we model count as discovered resources.** Screenshots also show support case and order numbers
+   (`CS-3245`, `ORD-20263245`); those are not resources of any system.
+4. **A later-captured snapshot is not used to discover resources.** Four labeled audit records exist only in a bundle
+   captured two days after `audit_at`, and their rows have no write time. "Last written before `audit_at` and still there
+   later" would prove existence, but without a write time it cannot be applied, and using them anyway would break "ignore
+   later evidence". The cost is 4 verification steps.
+5. **Linking an account that appears only in one activity row, by timing, was measured and not adopted.** The strictest
+   rule (link only when exactly one deletion row could belong to the case) was right 8 of 8 on labeled accounts but assigns
+   only 37 of 550 cases, because 464 of 550 cases share a `reported_at` with another case. A wrong link would put another
+   customer's record on this case, and the problem statement warns against shortcuts that depend on how the data was
+   generated.
+6. **Records with no identifier inside an export that several cases share are not attributed to a case.** Nothing in the
+   data says which case they belong to (12 resources).
+7. **Citation:** a state cites the most recent citable observation that shows it. For "the record exists", any citable
+   observation of an existing record qualifies (a record seen exposed earlier proves it exists). An "absent" state is never
+   proven by an earlier sighting.
+8. **Reproducibility is a requirement, and it was checked.** The final `output.csv` came from empty response caches; a rerun
+   from the warm cache with 8 workers (not 4) is byte-for-byte identical and makes 0 model calls. A placeholder API key
+   with an unreachable endpoint also reproduces it, so a reviewer does not need a real key.
+
+### Result on the 32 labeled samples (code/tests/evaluate_output.py)
+
+Case status 31 of 32; steps we wrote 157 of 157 correct; labeled steps found 157 of 193 (81%); whole array identical in 10
+of 32; shared steps in the right order in 32 of 32. Full tables and the failures found are in
+`code/evaluation/evaluation_report.md`.
+
+### Caveats, stated plainly
+
+- The rules were refined while looking at these samples, so the figures are a fit, not a held-out estimate. The real
+  accuracy on the other 486 requests is unknown and probably lower.
+- 34 of 111 labeled resources are never found. The same gaps almost certainly exist in the other cases.
+
+
+## D-019: A single harness, and a flag (not a guess) for the discovery gaps
+
+- **Date:** 2026-10-25
+- **Status:** Accepted and built.
+
+### Context
+
+Checks were spread over 13 scripts, three scorers and by-hand comparisons, so "is everything still right after this
+change?" had no single answer. Separately, 34 of 111 labeled resources are never discovered (D-018). Reading the data
+again showed why: the unlinked records (a bare `DELETE_RECORD` activity row, a `profile: null` 404 lookup, an analytics
+record with every identifier null) carry no email, hash, phone or user id. Nothing in them names a person, and the timing
+link is unreliable (in the labeled samples the single deletion event before `reported_at` was the right one in 3 cases, a
+wrong one in 2, and absent in 25). A model could only guess, and every wrong guess is a false step.
+
+### Decisions
+
+1. **`python code/main.py harness`** (`code/harness.py`) runs: every `check_*.py` in its own process; the 32 labeled
+   samples (status, steps found / right / written, order, validation errors); all 518 cases at 1 and at 8 workers, which must
+   give identical rows and a file that passes the format check and is byte-identical across runs; a comparison with the
+   committed `output.csv` (the 28 AI-routed intents are skipped, as no model runs); and a scan for key-like strings. It exits
+   0 only if all of it passes and needs no key or network. `--quick` skips the full runs.
+2. **A saved floor.** `code/evaluation/harness_baseline.json` holds the accepted numbers. A higher-is-better metric
+   falling, or a lower-is-better one (wrong steps, errors, mismatches) rising, fails the run. `--update-baseline` accepts the
+   current numbers deliberately. The 31 of 32 status result is reported but not a failure by itself; it may not get worse.
+3. **`code/agents/gaps.py`** adds a `discovery:unattributed_activity=N` flag when a delete, anonymize or redact action ran
+   up to 10 minutes before `reported_at` on a resource kind the case has no record of. It is deterministic, changes no
+   status and no step, and fires on 119 of 518 cases, so it means "worth a look", not "wrong".
+4. **No model is used for the gaps.** There is nothing in the data for it to read. An AI guess would be unfalsifiable and
+   would lower the score; the honest output is a flag for a person.
+
+### Consequences
+
+- Run the harness before every commit. A change that alters `output.csv` must be followed by regenerating it, or the
+  submission check fails on purpose.
+- The harness cannot say how well the system does on the unlabeled 486 cases: the samples are a fit, not a held-out set.
+
+
+## D-020: The AI also reads the requests the rules decide (a second reading)
+
+- **Date:** 2026-10-25
+- **Status:** Accepted and built.
+
+### Context
+
+D-002 sent only the 28 weak and ambiguous requests (23 distinct texts) to a model, so for 490 of 518 requests the system
+was rules alone. The regex is fast and explainable, but it can only know the wordings someone thought of. We wanted the AI
+to carry real weight in the intent step without giving it the power to cause a wrong deletion plan.
+
+### Decision
+
+Every request the rules decide is now also read by the primary model, using the same fixed prompt (so it shares the
+prompt cache) and **without being told the rules' answer**, so it cannot anchor on it.
+
+| Rules vs primary model | What happens |
+|---|---|
+| Agree | The rules' answer stands, marked "confirmed by <model>". No flag. |
+| Disagree | The escalation model breaks the tie and the case is flagged `intent:needs_review`. The answer changes **only if both models disagree with the rules**; otherwise the rules stand. |
+| No model can answer | The rules stand, unflagged. A run with no model gives exactly the answers it always did, so the harness and `--no-llm` are unchanged. |
+
+The weak and ambiguous path (D-002) is unchanged: the model decides, with Sol as escalation, and `NON_DELETION` +
+`needs_review` if both are down.
+
+### Measured
+
+On all 368 distinct strong texts (514 requests across the evaluation and sample files) the model agreed with the rules on
+every one: 363 deletion and 5 non-deletion, none flagged. A cold full run (empty response cache) made 375 model calls,
+about 0.05 USD at the assumed price, 89% of input tokens served from the provider's prompt cache, and `output.csv` was
+**byte-identical** to the run before. So today the second reading changes no answer; what it adds is a check that would
+catch a wording the rules get wrong, and an independent confirmation recorded per request.
+
+### Consequences
+
+- Cost: one extra cheap call per distinct request text, absorbed by the response cache and prompt cache on every rerun.
+- The model still only influences the intent step. Status, steps, order and evidence stay deterministic (D-012).
+- `IntentAgent(..., verify=False)` turns the second reading off. The tests cover agree, disagree-and-rules-win,
+  both-against-rules, tie-breaker down and no model.
+
+
+## D-021: An evidence interpreter agent, where the evidence is free text
+
+- **Date:** 2026-10-25
+- **Status:** Accepted and built.
+
+### Context
+
+After D-018 to D-020 the pipeline was uncertain about very little: identity resolved for all 485 deletion cases, and 7 cases
+were flagged for audit review, 4 resources `UNRESOLVED` and 2 `STALE`. Looking at the raw evidence showed one cause: the
+record is free text, not a field the rules know. A screenshot of a data flow said `Mode: Continuous`, `124 events delivered`
+(plainly running), but the rules only understand an explicit `enabled` field, so the flow was `UNRESOLVED` and its case
+fell to the "no evidence" default `COMPLETE`. That is the one place a reading model is needed.
+
+### Decision
+
+A new `interpret` agent (`code/agents/interpret.py`) runs between `state` and `policy`:
+
+1. **When.** Only for a resource whose state does not answer the question its category asks: a `DATA_FLOW` neither `ACTIVE`
+   nor `DISABLED`, or a `BACKUP_ARCHIVE` neither `RESTORABLE` nor `RESTORE_BLOCKED`, and which has a citable record. Anything
+   the rules can read never reaches a model.
+2. **What it reads.** Only the record that would be cited, with emails, hashes and phone numbers masked
+   (`<email>`, `<hash>`, `<phone>`; ISO dates are kept).
+3. **What it may answer.** One of the two states that fit the category, or `CANNOT_TELL`, plus a quote.
+4. **When the answer is accepted.** Only if both models (primary, then escalation) answer the same state, neither is
+   low-confidence, the state fits the category, and every fragment of each quote appears in the record word for word. Any
+   failure, an unavailable model or a `CANNOT_TELL` leaves the state exactly as the rules had it.
+5. **What changes.** Only the resource's state. Policy, audit, planner and validator are untouched, and the case is flagged
+   `state:interpreted_by_ai=N`.
+
+### Measured
+
+Of the 7 flagged cases the interpreter changed one: `case_39` (data flow, both models `ACTIVE`, quotes grounded), which
+becomes `INCOMPLETE` with the usual three steps (finding, `DISABLE_DATA_FLOW`, verify). It is the only row of `output.csv`
+that changed. The three backups it was shown (`backup_9287`, `backup_4689`, `backup_5237`) were answered `CANNOT_TELL` by both
+models, for the right reason: one record only describes the archive, the other two carry a bare `ACTIVE`.
+
+### Consequences
+
+- The model still cannot create a step, an id or a status: it can only supply one of two states, and only on evidence it
+  must quote. A hallucinated quote is rejected by a string check, not by trust.
+- `bootstrap.build_replay_stack` replays cached model answers with no network. The harness uses it, so the harness now
+  reproduces the whole submitted `output.csv`, AI-decided rows included, at no cost.
+- Whether `case_39` is really non-compliant is judged from the screenshot alone; no label confirms it.
+
+
+## D-022: ReAct for the agents that investigate
+
+- **Date:** 2026-10-25
+- **Status:** Accepted and built.
+
+### Context
+
+Two agents call a model to find something out, not just to label a text: the evidence interpreter (D-021) and the chat
+assistant. The chat used native tool calling, which works but hides the reasoning, and the interpreter was a single shot: it
+saw one record and had to answer from it, even when other evidence about the same resource existed.
+
+### Decision
+
+One reusable ReAct engine, `code/llm/react.py`, used by both. Each step the model writes a **Thought**, then an **Action**
+(one tool, or `final`), and reads the **Observation**, until it answers. The engine:
+
+- calls the model through the existing `LLMGateway`, so retries with backoff, the circuit breaker, the response cache,
+  usage accounting and the Luna-to-Sol choice are unchanged;
+- allows only the tools it was given (read-only), refuses a repeated action, turns a tool failure or unknown action into an
+  observation instead of an exception, truncates long observations, stops at a step limit, and sends an unparseable final
+  answer back for another try;
+- keeps the full trace (`Turn`: thought, action, input, observation) and renders it for the CLI and for audit.
+
+**Interpreter** tools: `list_evidence`, `read_record`, `activity_claims`, `what_to_decide`, all limited to the one resource
+and to what is known at `audit_at`. The acceptance rules of D-021 are unchanged and now apply to what it read: two models must
+agree, neither low-confidence, and each quote must appear word for word in an evidence record the model actually read and
+that may be cited at `audit_at` (never in a claim, never in a file captured later). The state and the cited file follow the
+record the quote came from, and both models' traces are stored on the result.
+
+**Chat**: the same tools as before, now driven by the engine. The `--trace` flag, or typing /trace in the chat, shows how an answer was reached.
+The id guard and the Luna-to-Sol fallback are kept.
+
+### Not ReAct, on purpose
+
+- **Intent classification** has nothing to look up: the whole input is one text, and an action would only repeat the regex's
+  own signals back to the model. A single structured answer is cheaper and as good.
+- **Screenshot reading** is one image in, one record out.
+- **Status, steps and order** are deterministic; no agent loop is allowed near them (D-012).
+
+### Measured
+
+On the four unresolved cases, both models answered in one step: the record already given was enough, which is what the
+prompt asks ("use a tool only when it can change your answer"). The investigation path (read another file, refuse a late
+file, refuse a quote from a claim, give up after the step limit) is covered by tests with a scripted model, not by a live
+case, because no live case needed it. A live chat question (`why is case_39 incomplete?`) took four actions: explain the case,
+read the evidence, read the policy, answer, and kept the claim and the evidence apart.
+
+### Consequences
+
+- More calls than a single shot for a question that needs digging, bounded by the step limit (5 for the interpreter,
+  6 for the chat) and by the response cache on a rerun.
+- The reasoning is stored with every AI-decided state, so an interviewer can read why the model said what it said.
+
+
+## D-023: Why the tombstone is REDACTED, not anonymized
+
+- **Date:** 2026-10-25
+- **Status:** Accepted (rule as supplied; not a choice we made).
+
+`deletion_rules.csv` has `rule_15, ACCOUNT_TOMBSTONE, "Account is deleted and only a stable internal user_id is needed to
+preserve references to retained records", REDACT`. `ANONYMIZE` is reserved for `ANALYTICS_PROFILE` and `PRODUCT_TELEMETRY`
+(rules 07 and 08). The problem statement says the same: "the stable user reference may remain, but direct identifiers such as
+name, email, phone, and email hash must be removed." The labeled sample `case_32` expects `REDACT_RECORD` and
+`VERIFY_RECORD_REDACTED` for its tombstone, and we match it.
+
+Anonymizing would defeat the tombstone's purpose. Anonymization means irreversibly unlinking a record from the person; the
+tombstone exists so retained invoices and audit logs keep pointing at the same `user_id`. Redaction removes what identifies
+the person to a reader (name, email, phone, hash) and keeps the one internal key that identifies nobody outside the company.
+Whether that key is itself pseudonymous personal data is a legal question the supplied policy answers by permitting it.
+
+
+## D-024: Exa web search for the chat only, never for the audit
+
+- **Date:** 2026-10-25
+- **Status:** Accepted and built. **Decision by the project owner**: after the proposal (Exa for the chat only, never for
+  the audit) was put to them, they confirmed it and asked for it to be recorded as their decision.
+
+### Context
+
+An Exa API key was added to the environment. The audit rules limit where a web search may be used: `AGENTS.md` rule 3 says
+predictions use only the participant-facing data under `dataset/`. Beyond the rule, web results would make `output.csv`
+depend on a live service, so the same input could give a different file tomorrow and `code.zip` could no longer reproduce
+the submission from its cache. And a search query is data sent to a third party, which an audit of personal data must not do
+with customer details.
+
+### Decision
+
+1. **Not in the audit.** No intent, identity, evidence, state, policy, audit, plan or validate code uses web search. A test
+   fails if any module other than the composition root and the chat tools mentions it.
+2. **A chat tool, `web_search`**, for background only: what a regulation says, what a term means. It exists only when
+   `EXA_API_KEY` is set, so without a key nothing changes. `code/websearch.py` uses the standard library (no new dependency).
+3. **Queries are masked** (emails, hashes and phone numbers become `<email>`, `<hash>`, `<phone>`) before leaving the machine.
+4. **Results are labeled** `EXTERNAL ... not evidence about any case`, the chat prompt tells the model never to present them as
+   case evidence or let them change a status, and ids that appear only in web text are not counted as verified by the
+   hallucination guard (D-015).
+5. **Failures are quiet**: a timeout or HTTP error becomes a short "web search unavailable" observation, and the error text
+   never contains the key. The key is read from the environment, sent in a header and never logged.
+
+### Measured
+
+A live question ("under GDPR can a company keep invoices after erasure, and does that match our rule set?") took three
+actions: web search for the Article 17(3)(b) legal-obligation exception, the policy tool for our rules, then a final answer
+that kept them apart and noted that invoices are not a category in the supplied rules.
+
+### Consequences
+
+- Better answers to general questions in the interview or while exploring; no effect on `output.csv`.
+- One more outbound dependency, optional and off by default; its calls are not in the usage report, which covers the models.

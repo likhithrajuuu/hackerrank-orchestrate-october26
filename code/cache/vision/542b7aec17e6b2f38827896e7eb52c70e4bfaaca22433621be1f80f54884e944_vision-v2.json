@@ -1,0 +1,116 @@
+{
+  "file_id": "evidence_28",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": "support_1034",
+      "email": "kagyeman8947@fastmail.com",
+      "customer_reference": null,
+      "display_name": "Kofi Agyeman",
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "CS-5034 \u00b7 Where is my delivery?\nNormal priority\nSLA 01:42\nAssigned: Maya Chen\nDelivery \u00b7 Tracking \u00b7 Order update"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "Kofi Agyeman",
+      "phone": null,
+      "status": null,
+      "observed_at": "09:12",
+      "notes": "Could you let me know where my order is and when it is expected to arrive?"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "Northstar Bot",
+      "phone": null,
+      "status": null,
+      "observed_at": "09:13",
+      "notes": "We received your message and are checking the order details."
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "Maya Chen",
+      "phone": null,
+      "status": null,
+      "observed_at": "09:28",
+      "notes": "The parcel reached the regional hub and is on track for delivery on 26 May."
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": "Kofi Agyeman",
+      "phone": null,
+      "status": null,
+      "observed_at": "09:35",
+      "notes": "Thanks for the update."
+    },
+    {
+      "resource_id": "ORD-20265034",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "In transit",
+      "observed_at": null,
+      "notes": "Product: Running shoes\nCarrier: SwiftShip\nTracking: SWF-884103\nExpected: 26 May 2026\nAssigned agent: Maya Chen"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Order confirmed",
+      "observed_at": "22 May",
+      "notes": null
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Dispatched",
+      "observed_at": "23 May",
+      "notes": null
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Reached regional hub",
+      "observed_at": "24 May 07:46",
+      "notes": null
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "In transit",
+      "observed_at": "24 May 08:15",
+      "notes": null
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Delivery expected",
+      "observed_at": "26 May",
+      "notes": null
+    }
+  ]
+}

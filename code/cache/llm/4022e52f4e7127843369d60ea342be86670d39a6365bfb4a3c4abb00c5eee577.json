@@ -1,0 +1,1 @@
+{"thought": "I need the audit’s current end-to-end assessment for case_18 before answering.", "action": "explain_case", "input": "{\"case_id\":\"case_18\"}"}

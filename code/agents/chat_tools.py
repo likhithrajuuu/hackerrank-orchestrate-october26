@@ -11,6 +11,7 @@ from agents.intent import IntentAgent, IntentRouter
 from classifier import classify
 from llm.usage import UsageLedger
 from loaders import Request, load_activity, load_requests, load_rules
+from websearch import WebSearchError, render as render_web
 from reporting import (load_sample_answers, render_case, render_run, render_sample_comparison, render_usage)
 
 MAX_TOOL_CHARS = 3500
@@ -21,7 +22,7 @@ def _clip(text: str) -> str:
 
 
 def make_tools(requests: dict[str, Request], get_graph: Callable, get_store: Callable, intent_agent: IntentAgent,
-               ledger: UsageLedger, prices: dict[str, tuple[float, float]]) -> list[StructuredTool]:
+               ledger: UsageLedger, prices: dict[str, tuple[float, float]], web=None) -> list[StructuredTool]:
     samples = load_sample_answers()
     activity: dict[str, list] = {}
     for row in load_activity():
@@ -105,6 +106,17 @@ def make_tools(requests: dict[str, Request], get_graph: Callable, get_store: Cal
         """Model usage so far: calls, cache hits and tokens per model, and cost when prices are configured."""
         return _clip(render_usage(ledger.summary(prices)))
 
-    return [StructuredTool.from_function(fn) for fn in
-            (classify_request_text, explain_case, compare_with_sample, resource_evidence, deletion_policy, run_cases,
-             usage_summary)]
+    def web_search(query: str) -> str:
+        """Search the public web for general background, such as what a privacy regulation requires or what a term means.
+        The results are EXTERNAL context, never evidence about a case or a customer, and never decide a status. Do not put
+        customer details in the query: emails, hashes and phone numbers are removed before it is sent."""
+        try:
+            return _clip(render_web(web.search(query), query))
+        except WebSearchError as exc:
+            return f"web search unavailable: {exc}"
+
+    functions = [classify_request_text, explain_case, compare_with_sample, resource_evidence, deletion_policy, run_cases,
+                 usage_summary]
+    if web is not None:                      # present only when EXA_API_KEY is configured
+        functions.append(web_search)
+    return [StructuredTool.from_function(fn) for fn in functions]

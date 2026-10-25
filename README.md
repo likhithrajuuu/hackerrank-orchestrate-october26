@@ -12,6 +12,92 @@ Read [`problem_statement.md`](./problem_statement.md) for the complete challenge
 
 ---
 
+## Our solution: setup and run
+
+A deletion-audit agent. For every request it decides whether deletion was asked for, resolves the person (current and
+historical emails, hashes, phones), reconstructs what the evidence says about each record at `audit_at`, applies
+`deletion_rules.csv`, and writes the ordered findings, remediation and verification steps. The decisions that matter are
+made by deterministic code; a model is used only for the fuzzy parts (weak or ambiguous request wording, screenshots, and a
+read-only chat). Design and reasons: [`PRD.md`](./PRD.md) and [`DECISIONS.md`](./DECISIONS.md); problems met along the way:
+[`code/ISSUES.md`](./code/ISSUES.md); scores and failures: [`code/evaluation/evaluation_report.md`](./code/evaluation/evaluation_report.md);
+model usage and cost: [`code/evaluation/usage_report.md`](./code/evaluation/usage_report.md).
+
+`code.zip` also carries `PRD.md`, `DECISIONS.md`, `AGENTS.md`, `problem_statement.md` and `.env.example`, so every link in this
+README resolves from inside the archive. It is built from the repository root with:
+
+```bash
+zip -r code.zip README.md PRD.md DECISIONS.md AGENTS.md problem_statement.md .env.example code \
+  -x "*/__pycache__/*" "*/.venv/*" "*/venv/*" "*/node_modules/*" "*/.git/*" "*/.DS_Store" "*.pyc"
+```
+
+### Setup (Python 3.12)
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r code/requirements.txt
+cp .env.example .env        # then fill in .env (it is git-ignored; never commit a key)
+```
+
+`.env` needs `OPENAI_API_KEY`, `LUNA_MODEL` and `SOL_MODEL` (the primary and escalation models). Everything else in
+`.env.example` is optional.
+
+**A real key is not needed to reproduce `output.csv`.** The model answers and the screenshot extractions are cached in
+`code/cache/`, so a run makes zero model calls. The settings still have to load, so `.env.example` already names the two
+models; just put any placeholder after `OPENAI_API_KEY=` (for example `OPENAI_API_KEY=unused`). Checked: with a placeholder
+key and an unreachable endpoint the run writes a file byte-identical to the submitted `output.csv`. With no key at all it
+stops with a configuration error. A real key is only needed for text or screenshots the cache has not seen, and for `chat`.
+
+### Produce the submission file
+
+```bash
+python code/main.py run --all --output output.csv
+```
+
+This runs all 518 requests, validates every row, writes `output.csv` at the repository root, then re-reads the file and
+checks it (header, 518 rows, sorted, same ids as the requests, valid JSON). It refuses to write if any row is invalid. The
+result is deterministic: the same inputs give a byte-identical file, whatever the order or the number of workers.
+
+### Other commands
+
+| Command | What it does |
+|---|---|
+| `python code/main.py classify "text"` | Is this a deletion request? Shows the regex rules and, for weak or ambiguous wording, the model's answer |
+| `python code/main.py case case_18` | Explains one case: intent, person, evidence by resource, observed states, verdicts and the plan |
+| `python code/main.py run --samples` | Runs the 32 labeled samples |
+| `python code/main.py chat` | Ask about cases in plain language (read-only; needs a key and models). Add `--trace`, or type /trace in the chat, to see the ReAct Thought / Action / Observation behind each answer. With `EXA_API_KEY` set it can also search the public web for background (clearly labeled external; never used by the audit) |
+| `python code/main.py usage-report` | Regenerates `code/evaluation/usage_report.md` from the usage ledger |
+| `python code/main.py status` | Pipeline stages and model usage |
+
+Add `--no-llm` to `classify`, `case` or `run` to work fully offline (weak or ambiguous requests then take a safe, flagged
+default instead of asking a model).
+
+### Tests and scoring
+
+```bash
+for t in ingest classifier identity evidence resilience gateway agents chat state policy determinism planner docs react; do
+  python code/tests/check_$t.py; done                    # 14 check scripts, none needs a key or network
+python code/tests/evaluate_output.py                      # whole rows against the 32 labeled samples
+python code/main.py harness --quick              # all suites + the labeled samples in one go (drop --quick for the full 518-case runs)
+```
+
+### Layout
+
+| Path | What |
+|---|---|
+| `code/main.py`, `code/cli.py` | Entry point and commands |
+| `code/classifier.py`, `code/agents/intent.py` | Intent: regex for strong cues, a model for weak and ambiguous ones |
+| `code/identity.py` | Current and historical identity, as of `audit_at` |
+| `code/evidence/` | Readers for SQL, JSON, logs, text, PDFs and screenshots, behind one time-gated store |
+| `code/state.py`, `code/policy.py`, `code/audit.py` | Observed state, required treatment, verdict and status |
+| `code/planner.py`, `code/validator.py`, `code/output.py` | Ordered steps, row validation, the CSV writer |
+| `code/graph.py`, `code/agents/` | The per-case flow (LangGraph) and its single-purpose agents |
+| `code/llm/` | Model access: retries with backoff and jitter, a circuit breaker per model, fallback, caching, usage ledger |
+| `code/cache/` | Cached model answers and screenshot extractions (no secrets) |
+| `code/tests/` | Checks and scorers |
+
+---
+
 ## Quick Start
 
 Clone the repository and move into the project directory:

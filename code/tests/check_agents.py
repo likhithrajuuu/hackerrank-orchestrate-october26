@@ -51,8 +51,8 @@ class FakeRequest:
         self.request_text = text
 
 
-def agent_for(gateway):
-    return IntentAgent(classify, IntentRouter(), gateway)
+def agent_for(gateway, verify=False):
+    return IntentAgent(classify, IntentRouter(), gateway, verify)
 
 
 requests = load_requests()
@@ -149,5 +149,208 @@ batch = requests[:3] + [non_deletion] + routed[:2]
 finals = graph.batch([{"request": r} for r in batch], config={"max_concurrency": 3})
 check("batch returns one result per request, in order",
       [f["result"].case_id for f in finals] == [r.case_id for r in batch])
+
+# 8) The prompts are laid out so the provider can cache their shared prefix (DECISIONS.md D-016).
+from agents.chat import SYSTEM as CHAT_SYSTEM
+from agents.intent import SYSTEM as INTENT_SYSTEM
+
+MIN_CACHEABLE_CHARS = 4096          # about 1,024 tokens at 4 characters per token: the provider's minimum prefix
+check("the intent system prompt is long enough to be cached", len(INTENT_SYSTEM) >= MIN_CACHEABLE_CHARS)
+check("the chat system prompt is long enough to be cached", len(CHAT_SYSTEM) >= MIN_CACHEABLE_CHARS)
+check("the system prompts are fixed text with no per-request placeholders",
+      all("{" not in p and "}" not in p for p in (INTENT_SYSTEM, CHAT_SYSTEM)))
+sample_texts = [r.request_text.split(".")[0].strip() for r in load_requests("sample_deletion_requests.csv")]
+check("no labeled sample request is copied into a prompt (the examples are synthetic)",
+      not any(len(t) > 25 and t in INTENT_SYSTEM for t in sample_texts))
+
+class Recorder:
+    """Records the messages a gateway call sends, to prove the customer's text comes last."""
+    def __init__(self):
+        self.messages = None
+    def with_structured_output(self, schema, include_raw=True, method=None):
+        return self
+    def invoke(self, messages):
+        self.messages = messages
+        return {"raw": None, "parsed": IntentVerdict(intent="DELETION", confidence="high", reason="t")}
+
+import tempfile as _tmp
+from llm.cache import ResponseCache
+from llm.config import LLMSettings, ModelSettings
+from llm.gateway import LLMGateway
+from llm.resilience import ResilientInvoker
+from llm.usage import UsageLedger
+
+rec = Recorder()
+settings = LLMSettings(None, {ModelRole.PRIMARY: ModelSettings("m", "high", None), ModelRole.ESCALATION: ModelSettings("m2", "low", None)})
+tmp = Path(_tmp.mkdtemp())
+gateway = LLMGateway(settings, {ModelRole.PRIMARY: rec, ModelRole.ESCALATION: rec},
+                     {r: ResilientInvoker(r.value) for r in ModelRole}, ResponseCache(tmp / "c"), UsageLedger(tmp / "u.jsonl"))
+from agents.intent import IntentAgent as _IA, IntentRouter as _IR
+_IA(classify, _IR(), gateway)({"request": FakeRequest("Please confirm that the profile is gone")})
+check("the call sends the fixed system prompt first and the customer's text last",
+      rec.messages[0].content == INTENT_SYSTEM and rec.messages[-1].content == "Please confirm that the profile is gone"
+      and len(rec.messages) == 2)
+
+# ---- gaps: flags unattributed activity, never changes a status or a step ----
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from agents.gaps import GapAgent
+
+at = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+row = lambda rid, minutes: SimpleNamespace(event_type="DELETE_RECORD", resource_id=rid, event_time=at - timedelta(minutes=minutes))
+gap_agent = GapAgent({"account_900": [row("account_900", 3)], "account_901": [row("account_901", 40)]})
+case = lambda known: {"request": SimpleNamespace(reported_at=at, audit_at=at + timedelta(days=1)),
+                      "discovery": SimpleNamespace(resource_ids=known), "flags": ["earlier"]}
+check("an unattributed deletion shortly before reported_at is flagged and earlier flags are kept",
+      gap_agent(case(()))["flags"] == ["earlier", "discovery:unattributed_activity=1"])
+check("a resource kind the case already has is not flagged", "discovery:unattributed_activity=1" not in gap_agent(case(("account_5",)))["flags"])
+
+# ---- second reading: the AI also reads strong rule answers, independently (D-020) ----
+class Scripted:
+    """Answers per role, so a test can make the primary and the escalation model agree or disagree with the rules."""
+
+    def __init__(self, primary, escalation=None, down=()):
+        self.answers, self.down, self.calls = {ModelRole.PRIMARY: primary, ModelRole.ESCALATION: escalation}, down, []
+
+    def structured(self, schema, system, user, version, order=None, accept=None):
+        role = order[0]
+        self.calls.append((role, user))
+        if role in self.down:
+            raise LLMUnavailable([f"{role.value}: TransientLLMError"])
+        return LLMResult(IntentVerdict(intent=self.answers[role], confidence="high", reason="scripted"), role, role.value, False)
+
+
+strong_deletion = next(r for r in requests if router.is_strong(classify(r.request_text)) and classify(r.request_text).intent == "DELETION")
+ask = lambda gw: agent_for(gw, verify=True)({"request": strong_deletion})["intent"]
+
+gw = Scripted("DELETION")
+d = ask(gw)
+check("a strong answer the model agrees with is confirmed, with one call and no review flag",
+      d.intent == Intent.DELETION and d.source == Source.RULES and not d.needs_review and len(gw.calls) == 1
+      and any(x.startswith("confirmed by") for x in d.reasons))
+check("the model is not told what the rules said (only the customer's text is sent)", gw.calls[0][1] == strong_deletion.request_text)
+
+gw = Scripted("NON_DELETION", escalation="DELETION")
+d = ask(gw)
+check("one model disagreeing is settled by a second model, which sides with the rules: rules stand, flagged",
+      d.intent == Intent.DELETION and d.needs_review and [r for r, _ in gw.calls] == [ModelRole.PRIMARY, ModelRole.ESCALATION])
+
+d = ask(Scripted("NON_DELETION", escalation="NON_DELETION"))
+check("both models against the rules overrides them, and the case is flagged",
+      d.intent == Intent.NON_DELETION and d.source == Source.ESCALATION and d.needs_review)
+
+d = ask(Scripted("NON_DELETION", down=(ModelRole.ESCALATION,)))
+check("if the tie-breaker is unavailable the rules stand, flagged",
+      d.intent == Intent.DELETION and d.source == Source.RULES and d.needs_review)
+
+d = ask(Scripted("DELETION", down=(ModelRole.PRIMARY, ModelRole.ESCALATION)))
+check("if no model answers, the rules stand unflagged: a run without a model gives the same answers",
+      d.intent == Intent.DELETION and d.source == Source.RULES and not d.needs_review)
+
+gw = Scripted("NON_DELETION")
+d = agent_for(gw, verify=False)({"request": strong_deletion})["intent"]
+check("with the second reading off, strong answers make no call", not gw.calls and d.source == Source.RULES)
+
+# ---- interpret: the AI reads only records the rules cannot read, with ReAct, and its answer must be grounded (D-021, D-022) ----
+import json as _json
+from agents.interpret import InterpretAgent, grounded, mask
+from contracts import Source as _S, State, StateResult, StateVerdict, ResourceState, Observation, Claim
+from llm.react import ReActStep
+
+when = datetime(2026, 9, 1, tzinfo=timezone.utc)
+FLOW_TEXT = {"resource_id": "data_flow_9", "email": "ann@example.com", "notes": "Mode: Continuous; Owner: Data Platform; 124 events delivered"}
+OTHER_TEXT = {"resource_id": "data_flow_9", "notes": "Paused by operator"}
+LATE_TEXT = {"resource_id": "data_flow_9", "notes": "Resumed after audit"}
+RECORDS = [SimpleNamespace(file_id="evidence_1", fields=FLOW_TEXT, captured_at=when - timedelta(days=2)),
+           SimpleNamespace(file_id="evidence_2", fields=OTHER_TEXT, captured_at=when - timedelta(days=1)),
+           SimpleNamespace(file_id="evidence_3", fields=LATE_TEXT, captured_at=when + timedelta(days=1))]
+store_stub = SimpleNamespace(for_resource=lambda rid, at: RECORDS)
+obs = lambda f, c: Observation("data_flow_9", "integration_service", "DATA_FLOW", State.PRESENT, f, "json", c, None, "row")
+
+
+def flow(state=State.PRESENT, category="DATA_FLOW", citable=True, claims=()):
+    return ResourceState("data_flow_9", "integration_service", category, state, "evidence_1" if citable else "", citable,
+                         None, False, tuple(obs(r.file_id, r.captured_at) for r in RECORDS), tuple(claims))
+
+
+class Verdicts:
+    """A scripted ReAct model: per role a list of steps. A plain StateVerdict means 'final answer in one step'."""
+
+    def __init__(self, primary, escalation=None, down=()):
+        as_steps = lambda x: x if isinstance(x, list) else [x]
+        self.script = {ModelRole.PRIMARY: as_steps(primary), ModelRole.ESCALATION: as_steps(escalation or primary)}
+        self.down, self.calls, self.index = down, [], {ModelRole.PRIMARY: 0, ModelRole.ESCALATION: 0}
+
+    def structured(self, schema, system, user, version, order=None, accept=None):
+        assert schema is ReActStep
+        role = order[0]
+        self.calls.append(user)
+        if role in self.down:
+            raise LLMUnavailable(["down"])
+        step = self.script[role][min(self.index[role], len(self.script[role]) - 1)]
+        self.index[role] += 1
+        if isinstance(step, StateVerdict):
+            step = ReActStep(thought="the record is enough", action="final", input=_json.dumps(step.model_dump()))
+        return LLMResult(step, role, role.value, False)
+
+
+def verdict(state="ACTIVE", confidence="high", quote="Mode: Continuous; 124 events delivered"):
+    return StateVerdict(state=state, confidence=confidence, quote=quote, reason="r")
+
+
+act = lambda action, text="": ReActStep(thought="look", action=action, input=text)
+
+
+def interpret(gw, rs=None):
+    case = {"request": SimpleNamespace(audit_at=when), "states": StateResult((rs or flow(),)), "flags": ["earlier"]}
+    return InterpretAgent(store_stub, gw)(case)
+
+
+check("mask hides emails, hashes and phone numbers but keeps the behavior",
+      mask("a@b.co 33f407a3689b1b57bdb15b492e565867a507c27ce066c1d6a584f03f4dbb5565 +34 668 324 642 | 2026-04-26 1,284 events")
+      == "<email> <hash> <phone> | 2026-04-26 1,284 events")
+check("a quote stitched from fragments of the record is grounded; invented words are not",
+      grounded("Mode: Continuous; 124 events delivered", "Mode: Continuous; Owner: Data Platform; 124 events delivered")
+      and not grounded("Mode: Continuous; 900 events", "Mode: Continuous; 124 events delivered") and not grounded("", "x"))
+
+gw = Verdicts(verdict())
+out = interpret(gw)
+check("two models agreeing with a grounded quote settles the state, and the case is flagged",
+      out["states"].states[0].state == State.ACTIVE and out["interpretations"][0].after == "ACTIVE"
+      and out["flags"] == ["earlier", "state:interpreted_by_ai=1"] and len(gw.calls) == 2)
+check("the model is sent the masked record, never the email", all("ann@example.com" not in c and "<email>" in c for c in gw.calls))
+check("the audit trace of each model's Thought / Action is kept on the result",
+      "Thought: the record is enough" in out["interpretations"][0].trace and out["interpretations"][0].trace.count("[") == 2)
+check("with no model nothing changes", interpret(None) == {})
+check("a state the rules already read makes no call", not (g2 := Verdicts(verdict())).calls and interpret(g2, flow(State.ACTIVE)) == {} and not g2.calls)
+check("a record that cannot be cited is not interpreted", interpret(Verdicts(verdict()), flow(citable=False)) == {})
+check("a category with no question is not interpreted", interpret(Verdicts(verdict()), flow(category="USER_PROFILE")) == {})
+check("a quote that is not in any record it saw is rejected", interpret(Verdicts(verdict(quote="Mode: Paused"))) == {})
+check("the two models disagreeing leaves the state alone", interpret(Verdicts(verdict(), verdict("DISABLED", quote="Mode: Continuous"))) == {})
+check("CANNOT_TELL leaves the state alone", interpret(Verdicts(verdict("CANNOT_TELL", quote=""))) == {})
+check("low confidence leaves the state alone", interpret(Verdicts(verdict(confidence="low"))) == {})
+check("a state that does not fit the category is rejected", interpret(Verdicts(verdict("RESTORABLE"))) == {})
+check("if the second model is unavailable nothing changes", interpret(Verdicts(verdict(), down=(ModelRole.ESCALATION,))) == {})
+
+# ReAct: the model looks at other evidence before answering
+dig = [act("list_evidence"), act("read_record", "evidence_2"), verdict("DISABLED", quote="Paused by operator")]
+gw = Verdicts(dig)
+out = interpret(gw)
+check("a model can read another evidence file first, and the state and the citation follow the file the quote came from",
+      out["states"].states[0].state == State.DISABLED and out["states"].states[0].evidence_id == "evidence_2"
+      and out["interpretations"][0].evidence_id == "evidence_2" and len(gw.calls) == 6)
+check("list_evidence shows what can and cannot be cited at audit_at",
+      "evidence_3" in gw.calls[1] and "cannot be cited" in gw.calls[1])
+check("a quote from a file captured after audit_at is refused",
+      interpret(Verdicts([act("read_record", "evidence_3"), verdict("ACTIVE", quote="Resumed after audit")])) == {})
+claim = Claim("activity_9", "SYNC_RECORD", "SUCCESS", when, "Sync worker reported success")
+check("activity-log claims are shown but can never be the quoted evidence",
+      interpret(Verdicts([act("activity_claims"), verdict("ACTIVE", quote="Sync worker reported success")]), flow(claims=(claim,))) == {})
+gw = Verdicts([act("activity_claims"), verdict()])
+interpret(gw, flow(claims=(claim,)))
+check("claims are labeled as claims, not proof", "CLAIMS (what a worker reported, not proof)" in gw.calls[1])
+check("a model that only keeps calling tools gives up without changing the state",
+      interpret(Verdicts([act("list_evidence"), act("what_to_decide"), act("activity_claims"), act("read_record", "evidence_2"),
+                          act("read_record", "evidence_1")])) == {})
 
 print("agent and graph checks passed")

@@ -1,0 +1,76 @@
+{
+  "file_id": "evidence_32",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": "backup_9291",
+      "email": "bluepeakco@outlook.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "26 Apr 02:00",
+      "notes": "Region: ap-southeast-1; Size: 102.3 GB; Encryption: AES-256; Tier: Archive"
+    },
+    {
+      "resource_id": "backup_9288",
+      "email": "miller.logistics@company.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "26 Apr 02:00",
+      "notes": "Region: us-west-2; Size: 67.1 GB; Encryption: AES-256; Tier: Archive"
+    },
+    {
+      "resource_id": "backup_9287",
+      "email": "areed1433@gmail.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "26 Apr 2026 02:00 UTC",
+      "notes": "Region: eu-west-1; Created (table): 26 Apr 02:00; Size: 84.7 GB; Encryption: AES-256; Tier: Archive; Path: s3://northstar-backups/customer-platform/weekly/segment-42-20260426.tar.zst; Checksum: Verified; Last drill: 29 Mar 2026; Retention end: 26 Jul 2026"
+    },
+    {
+      "resource_id": "backup_9286",
+      "email": "summit-retail@company.com",
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "26 Apr 02:00",
+      "notes": "Region: us-east-1; Size: 91.4 GB; Encryption: AES-256; Tier: Archive"
+    },
+    {
+      "resource_id": "backup_9286",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Completed",
+      "observed_at": "25 Apr",
+      "notes": "backup_9286 restored \u00b7 Completed"
+    },
+    {
+      "resource_id": "backup_9281",
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Completed",
+      "observed_at": "24 Apr",
+      "notes": "backup_9281 restored \u00b7 Completed"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": "Completed",
+      "observed_at": "22 Apr",
+      "notes": "checksum verification \u00b7 Completed"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"thought": "This asks for general GDPR background and comparison with the configured retained-record rules. I should use a public source for the legal context and check the rule set before comparing.", "action": "web_search", "input": "{\"query\":\"GDPR Article 17(3)(b) erasure legal obligation invoices tax retention official GDPR text\"}"}

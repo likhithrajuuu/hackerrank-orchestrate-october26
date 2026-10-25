@@ -1,36 +1,73 @@
-import base64
+"""Reads screenshots of internal admin tools into records.
+
+Extraction goes through the LLM gateway (Sol first, per D-001: screenshots are its job, and the first model tried,
+gpt-4o, refused one of them). Results are cached by the image's CONTENT hash, so a replaced screenshot can never be
+served a stale extraction, and a cache-only reader lets offline runs and tests use them without any key.
+"""
+import hashlib
 import json
-import os
 from pathlib import Path
+from typing import Callable
 
-CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "images"
-MODEL = os.environ.get("OPENAI_VISION_MODEL", "gpt-4o")  # any vision-capable chat model
-PROMPT = (
-    "This is a screenshot of an internal admin tool. Extract every record it shows as JSON: "
-    '{"records":[{"resource_id":..., "email":..., "customer_reference":..., "display_name":..., '
-    '"phone":..., "status":..., "observed_at":..., "notes":...}]}. Use null for anything not shown. '
-    "Copy values exactly as displayed. Output JSON only."
+from pydantic import BaseModel
+
+from llm.config import ModelRole
+
+CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "vision"
+PROMPT_VERSION = "vision-v2"      # bump when the prompt changes, so cached extractions are not reused by mistake
+SYSTEM = (
+    "You read screenshots of internal admin tools of a fictional online shop used in a software test. All people, "
+    "emails and ids are fictional. Extract every record the screen shows, from the table AND from any side panel or "
+    "raw-document view. Copy values exactly as displayed. Use null for anything not shown. Do not guess."
 )
+USER = ("List every record visible. Put an id such as account_123, search_45, support_9, export_1, backup_2, data_flow_3 "
+        "or audit_record_4 in resource_id, and any user_N in customer_reference.")
 
 
-def read_image(path: Path, file_id: str):
-    """Return (records, usage). Uses the cache; calls the model only on a cache miss."""
-    cache = CACHE_DIR / f"{file_id}.json"
-    if cache.exists():
-        data = json.loads(cache.read_text(encoding="utf-8"))
-        return data["records"], data.get("usage", {})
-    from openai import OpenAI  # imported lazily: only needed on a cache miss
+class ImageRecord(BaseModel):
+    resource_id: str | None = None
+    email: str | None = None
+    customer_reference: str | None = None
+    display_name: str | None = None
+    phone: str | None = None
+    status: str | None = None
+    observed_at: str | None = None
+    notes: str | None = None
 
-    client = OpenAI()  # key comes from OPENAI_API_KEY
-    b64 = base64.b64encode(Path(path).read_bytes()).decode()
-    resp = client.chat.completions.create(
-        model=MODEL, temperature=0, response_format={"type": "json_object"},
-        messages=[{"role": "user", "content": [
-            {"type": "text", "text": PROMPT},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}]}])
-    records = json.loads(resp.choices[0].message.content)["records"]
-    usage = {"model": MODEL, "input_tokens": resp.usage.prompt_tokens,
-             "output_tokens": resp.usage.completion_tokens}
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps({"records": records, "usage": usage}, indent=2), encoding="utf-8")
-    return records, usage
+
+class ImageExtraction(BaseModel):
+    records: list[ImageRecord]
+
+
+Vision = Callable[[Path, str], list[dict]]
+
+
+def _cache_file(image: bytes) -> Path:
+    return CACHE_DIR / f"{hashlib.sha256(image).hexdigest()}_{PROMPT_VERSION}.json"
+
+
+def cached_vision(path: Path, file_id: str) -> list[dict]:
+    """Cache only: never calls a model. Raises FileNotFoundError when this exact image has not been extracted."""
+    cache = _cache_file(Path(path).read_bytes())
+    if not cache.exists():
+        raise FileNotFoundError(f"no cached extraction for {file_id} ({cache.name}); run with a model configured")
+    return json.loads(cache.read_text(encoding="utf-8"))["records"]
+
+
+class VisionExtractor:
+    """Cache first, then the gateway (Sol, then Luna). Every real call goes through retries, the breaker and the ledger."""
+
+    def __init__(self, gateway, order=(ModelRole.ESCALATION, ModelRole.PRIMARY)):
+        self._gateway, self._order = gateway, order
+
+    def __call__(self, path: Path, file_id: str) -> list[dict]:
+        image = Path(path).read_bytes()
+        cache = _cache_file(image)
+        if cache.exists():
+            return json.loads(cache.read_text(encoding="utf-8"))["records"]
+        result = self._gateway.structured(ImageExtraction, SYSTEM, USER, PROMPT_VERSION, order=self._order, image=image)
+        records = [r.model_dump() for r in result.value.records]
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps({"file_id": file_id, "model": result.model, "records": records}, indent=2),
+                         encoding="utf-8")
+        return records

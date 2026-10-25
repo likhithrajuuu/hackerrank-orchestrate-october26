@@ -182,25 +182,33 @@ Conditions are checked against evidence, for example the retention period in the
 
 ## 7. Architecture
 
-Mostly deterministic code, with a model only for the fuzzy parts.
+Mostly deterministic code, with a model only for the fuzzy parts. (Updated to the layout that was built; see
+`DECISIONS.md` D-004, D-009, D-010, D-013, D-018.)
 
 ```
 code/
-  main.py                CLI entry: load → run all cases → validate → write output.csv
-  loaders/               csv, log, json, sqlite, pdf, image loaders
-  index/                 identifier index; resource index; time filter
-  identity.py            resolve(email, audit_at) → Subject
-  intent.py              classify request_text (model + rules)
-  state.py               reconstruct resource state at audit_at
-  policy.py              deletion_rules → required treatment
-  planner.py             findings / remediation / verification builder + ordering
-  validate.py            schema, phase order, numbering, evidence-time checks
-  cache/                 per-case and per-file model results (keyed by input hash)
-evaluation/              evaluation_report.md, usage_report.md
+  main.py, cli.py        entry point and commands (run, case, classify, chat, usage-report, status)
+  loaders.py, config.py  typed CSV loaders, paths and time parsing
+  classifier.py          regex intent rules; agents/intent.py routes weak and ambiguous texts to a model
+  identity.py            resolve(email, audit_at) -> Subject (current and historical identifiers)
+  evidence/              readers for SQL, JSON, logs, text, PDFs, screenshots behind one time-gated store
+  state.py               stage 4: evidence -> observed state per resource at audit_at
+  policy.py              stage 5: required treatment from deletion_rules.csv
+  audit.py               stage 6: verdict per resource and the case status
+  planner.py             stage 7a: ordered findings, remediation, verification (canonical order)
+  validator.py           stage 7b: every row checked before it can be written
+  output.py              stage 7c: output.csv writer and file check
+  graph.py, agents/      the per-case flow (LangGraph) and its single-purpose agents
+  llm/                   gateway, retries with backoff and jitter, circuit breaker, caches, usage ledger
+  reporting.py, reports.py   text views and the generated usage report
+  cache/                 cached model answers and screenshot extractions (no secrets)
+  tests/                 14 check scripts and 3 scorers against the labeled samples
+  evaluation/            evaluation_report.md, usage_report.md
 README.md                setup and run instructions
 ```
 
-Model use is limited to (a) intent classification of multilingual text and (b) extracting facts from images and PDFs. Everything else is code, so results are reproducible and cheap.
+Model use is limited to (a) intent classification of weak and ambiguous request wording, (b) reading screenshots, and (c) a
+read-only chat. Everything else is code, so results are reproducible and cheap.
 
 ## 8. Anonymization semantics (what the plan means)
 
@@ -329,3 +337,15 @@ No random token or hash replaces the identifiers: the fields are nulled and the 
 | Q6 | OCR/vision accuracy on screenshots and PDFs. | Cache extractions; cross-check against SQL/JSON when both exist. |
 | R1 | Overfitting to 32 samples. | Hold-out by scenario family; write rules from the policy, not from case shortcuts. |
 | R2 | Cost and non-determinism from model calls. | Deterministic core; temperature 0; cache everything. |
+
+
+### Status of the open questions (updated after the build)
+
+| # | Question | Status |
+|---|---|---|
+| Q1 | How a fully anonymous record is tied to its case | **Not solved.** Nothing in the data links it; 12 resources stay undiscovered (D-018). |
+| Q2 | Whether verification covers every record that must end up deleted | **Answered** by the labeled samples: every assessed resource gets a verification step. |
+| Q3 | Whether the current snapshot counts as held at `audit_at` | Handled by using audit entries up to `audit_at` only; not contradicted by any sample. |
+| Q4 | A request email that resolves to no user | Never occurs in the data; handled (unresolved identity is flagged). |
+| Q5 | Multilingual and mixed intent | Done: regex for strong cues, a model for weak and ambiguous ones (D-002). |
+| Q6 | Screenshot and PDF accuracy | All 11 screenshots and 4 PDFs read; screenshots by the escalation model, cached by content hash (D-018). |

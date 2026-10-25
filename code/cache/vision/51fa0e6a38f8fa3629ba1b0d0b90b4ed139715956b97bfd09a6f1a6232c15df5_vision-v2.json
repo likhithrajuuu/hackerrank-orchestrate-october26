@@ -1,0 +1,96 @@
+{
+  "file_id": "evidence_60",
+  "model": "gpt-6.1-sol",
+  "records": [
+    {
+      "resource_id": null,
+      "email": "sj.park@naver.com",
+      "customer_reference": null,
+      "display_name": "Soo-jin Park",
+      "phone": "+82 10-5837-9451",
+      "status": "Live",
+      "observed_at": "15 Sep 2026 23:40 UTC",
+      "notes": "marketing_001; Market: South Korea; Language: Korean; Email opt-in: Yes; SMS opt-in: No"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "23:40",
+      "notes": "Product-category update; Desk accessories \u00b7 Drinkware"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "23:38",
+      "notes": "Campaign eligibility check; Autumn offers \u00b7 Eligible"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "23:35",
+      "notes": "Profile refresh; Live profile fields updated"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": "23:32",
+      "notes": "Audience evaluation; Returning customers \u2014 East Asia"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Audience: Returning customers \u2014 East Asia; Segments: Repeat customer \u00b7 Home & lifestyle \u00b7 Mobile shopper; Preferred categories: Desk accessories \u00b7 Drinkware; Last campaign: Autumn offers; Open rate: 32.4%; Click rate: 6.8%"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Autumn offers; 32.4% open rate"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Home & Lifestyle Picks; 28.7% open rate"
+    },
+    {
+      "resource_id": null,
+      "email": null,
+      "customer_reference": null,
+      "display_name": null,
+      "phone": null,
+      "status": null,
+      "observed_at": null,
+      "notes": "Profile refreshed from live data; Recorded"
+    }
+  ]
+}

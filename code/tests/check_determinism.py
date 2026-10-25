@@ -15,8 +15,10 @@ os.environ.pop("LLM_API_KEY", None)
 
 from agents.audit import AuditAgent
 from agents.discovery import DiscoveryAgent
+from agents.plan import PlannerAgent
 from agents.identity import IdentityAgent
 from agents.policy import PolicyAgent
+from planner import Planner
 from agents.state import StateAgent
 from audit import Auditor
 from contracts import Intent, IntentDecision, Observation, ResourceState, Source, State
@@ -82,13 +84,14 @@ def always_deletion(state):          # isolates the pipeline from the intent ste
 
 
 graph = build_graph(always_deletion, IdentityAgent(index), DiscoveryAgent(store),
-                    StateAgent(StateReconstructor(store, claims)), PolicyAgent(engine), AuditAgent(auditor))
+                    StateAgent(StateReconstructor(store, claims)), PolicyAgent(engine), AuditAgent(auditor),
+                    PlannerAgent(Planner()))
 requests = load_requests("sample_deletion_requests.csv") + load_requests()[:60]
 
 
 def signature(final):
     audit = final["audit"]
-    return (final["request"].case_id, final["result"].status,
+    return (final["request"].case_id, final["result"].status, final["result"].steps,
             tuple((a.system_id, a.resource_id, a.verdict.value, a.finding_op, a.remediation_op, a.verification_op, a.evidence_id)
                   for a in audit.assessments))
 
