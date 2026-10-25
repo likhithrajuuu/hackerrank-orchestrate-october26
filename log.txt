@@ -695,3 +695,42 @@ branch=main
 repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T01:08:38Z] Interview preparation advice
+
+User Prompt (verbatim, secrets redacted):
+tell me some things that I can prepare for the 30 min AI interiew
+
+Agent Response Summary:
+Gave a 30-minute structure, the numbers to know, expected questions with honest answers, the known weak points to state up front, and a pre-submission checklist (notably setting real model prices before regenerating the usage report).
+
+Actions:
+* No files changed.
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=main
+repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T01:16:22Z] Which flags are set (case flags and command-line flags)
+
+User Prompt (verbatim, secrets redacted):
+what are some of the flags that I have set / command-line flags
+
+Agent Response Summary:
+Counted the case flags from a replayed full run (128 of 518 cases carry one: 122 unattributed-activity, 6 audit review, 1 AI-interpreted) and listed the command-line flags per CLI command.
+
+Actions:
+* Ran a read-only replay of all 518 cases to count flags; no files changed.
+* Appended this entry to log.txt.
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=main
+repo_root=/Users/likhithrajup/Developer/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
